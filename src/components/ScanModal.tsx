@@ -22,39 +22,55 @@ function makeReader() {
 export function ScanModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const videoRef = useRef<HTMLVideoElement>(null)
-  const controlsRef = useRef<IScannerControls | null>(null)
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null)
   const [camError, setCamError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
   const [manual, setManual] = useState('')
 
-  // Start the webcam decode loop on mount; tear it down on unmount.
+  // Acquire the camera ourselves (so we control srcObject + play() explicitly),
+  // then hand the already-playing <video> to ZXing. Each effect run owns its own
+  // stream/controls and tears exactly those down, so React StrictMode's
+  // setup→cleanup→setup can't leave a detached-but-live stream (green light on,
+  // no feed).
   useEffect(() => {
     if (result) return // stop scanning once we have a hit
     const reader = makeReader()
-    readerRef.current = reader
-    let cancelled = false
-    reader
-      .decodeFromVideoDevice(undefined, videoRef.current!, (res) => {
-        if (res && !cancelled) handleCode(res.getText())
-      })
-      .then((controls) => {
-        if (cancelled) controls.stop()
-        else controlsRef.current = controls
-      })
-      .catch(() => setCamError('No camera available — upload a photo or type/scan the code below.'))
+    let stopped = false
+    let stream: MediaStream | null = null
+    let controls: IScannerControls | null = null
+
+    ;(async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        })
+        const v = videoRef.current
+        if (stopped || !v) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        v.srcObject = stream
+        await v.play().catch(() => undefined)
+        controls = await reader.decodeFromVideoElement(v, (res) => {
+          if (res && !stopped) handleCode(res.getText())
+        })
+        if (stopped) controls.stop()
+      } catch {
+        setCamError('No camera available — upload a photo or type/scan the code below.')
+      }
+    })()
+
     return () => {
-      cancelled = true
-      controlsRef.current?.stop()
+      stopped = true
+      controls?.stop()
+      stream?.getTracks().forEach((t) => t.stop())
+      if (videoRef.current) videoRef.current.srcObject = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result])
 
-  const stopCamera = () => controlsRef.current?.stop()
-
   const handleCode = async (raw: string) => {
-    stopCamera()
     setBusy(true)
     try {
       const r = await api.scan(raw)
@@ -103,7 +119,7 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
                   background: '#000', aspectRatio: '4 / 3', border: '1px solid var(--border)',
                 }}
               >
-                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 <div style={{
                   position: 'absolute', inset: '18% 22%', border: '2px solid var(--accent)',
                   borderRadius: 8, boxShadow: '0 0 0 100vmax rgba(0,0,0,0.35)',

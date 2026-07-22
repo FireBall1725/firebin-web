@@ -113,7 +113,7 @@ export function PartDetailPage() {
                     <td className="c-dim" style={{ width: '45%' }}>{p.template_name}</td>
                     <td className="num c-text" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
                       {p.value}
-                      {p.units ? ` ${p.units}` : ''}
+                      {p.units && !p.value.trim().endsWith(p.units) ? ` ${p.units}` : ''}
                     </td>
                   </tr>
                 ))}

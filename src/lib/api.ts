@@ -62,6 +62,48 @@ export interface ParameterTemplate {
   units?: string
 }
 
+export interface Project {
+  id: string
+  name: string
+  description?: string
+  boards?: Board[]
+  board_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Board {
+  id: string
+  project_id: string
+  name: string
+  description?: string
+  source_filename?: string
+  source_format: string
+  position: number
+  lines?: BOMLine[]
+  line_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type MatchKind = 'mpn' | 'value_footprint' | 'none'
+
+export interface BOMLine {
+  id: string
+  board_id: string
+  refs: string
+  quantity: number
+  value: string
+  footprint: string
+  mpn?: string
+  manufacturer?: string
+  description?: string
+  part_id?: string
+  part_name?: string
+  match_kind: MatchKind
+  position: number
+}
+
 export interface Part {
   id: string
   category_id?: string
@@ -333,7 +375,9 @@ async function request<T>(
   retry = true,
 ): Promise<T> {
   const headers = new Headers(options.headers)
-  if (options.body && !headers.has('Content-Type')) {
+  // FormData sets its own multipart Content-Type (with boundary); only default
+  // to JSON for other bodies.
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
   const access = tokenStore.access
@@ -409,6 +453,35 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, parent_id: parentID ?? null }),
     })
+  },
+
+  // ── Projects & boards ───────────────────────────────────────────────────────
+  listProjects() {
+    return request<Project[]>('/projects')
+  },
+  createProject(body: { name: string; description?: string }) {
+    return request<Project>('/projects', { method: 'POST', body: JSON.stringify(body) })
+  },
+  getProject(id: string) {
+    return request<Project>(`/projects/${id}`)
+  },
+  updateProject(id: string, body: { name: string; description?: string }) {
+    return request<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+  },
+  deleteProject(id: string) {
+    return request<{ status: string }>(`/projects/${id}`, { method: 'DELETE' })
+  },
+  uploadBoard(projectID: string, file: File, name?: string) {
+    const form = new FormData()
+    form.append('file', file)
+    if (name) form.append('name', name)
+    return request<Board>(`/projects/${projectID}/boards`, { method: 'POST', body: form })
+  },
+  getBoard(id: string) {
+    return request<Board>(`/boards/${id}`)
+  },
+  deleteBoard(id: string) {
+    return request<{ status: string }>(`/boards/${id}`, { method: 'DELETE' })
   },
 
   // ── Parts ───────────────────────────────────────────────────────────────────

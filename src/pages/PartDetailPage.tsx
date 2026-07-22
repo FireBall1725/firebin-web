@@ -13,6 +13,7 @@ import {
   type AdjustKind,
 } from '../lib/api'
 import { NewPartModal } from '../components/NewPartModal'
+import { ManufacturerParts } from '../components/ManufacturerParts'
 import { stockClass, num } from '../lib/format'
 import { useRealtime } from '../lib/useRealtime'
 
@@ -184,14 +185,9 @@ export function PartDetailPage() {
         </Section>
       )}
 
-      {/* Manufacturer / supplier — endpoints not built yet */}
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <Section title="Manufacturer parts">
-          <Empty>MPNs and datasheets land with the enrichment piece.</Empty>
-        </Section>
-        <Section title="Suppliers & pricing">
-          <Empty>Distributor SKUs and price breaks land with the enrichment piece.</Empty>
-        </Section>
+      {/* Commercial tree: MPNs → supplier SKUs → price breaks */}
+      <div className="mt-8">
+        <ManufacturerParts partID={part.id} items={part.manufacturer_parts ?? []} onChanged={reload} />
       </div>
 
       {/* History */}

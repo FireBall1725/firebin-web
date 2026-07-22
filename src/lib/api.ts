@@ -79,12 +79,58 @@ export interface Part {
   variant_count?: number
   parameters?: PartParameter[]
   variants?: Part[]
+  manufacturer_parts?: ManufacturerPart[]
 }
 
 export interface ParameterInput {
   name: string
   units?: string
   value: string
+}
+
+export interface Manufacturer {
+  id: string
+  name: string
+  website?: string
+}
+
+export interface Supplier {
+  id: string
+  key: string
+  name: string
+  website?: string
+  is_distributor: boolean
+}
+
+export interface PriceBreak {
+  id?: string
+  quantity: number
+  price: number
+  currency: string
+}
+
+export interface SupplierPart {
+  id: string
+  manufacturer_part_id: string
+  supplier_id: string
+  supplier_name: string
+  sku: string
+  packaging?: string
+  moq?: number
+  url?: string
+  pricing: PriceBreak[]
+}
+
+export interface ManufacturerPart {
+  id: string
+  part_id: string
+  manufacturer_id?: string
+  manufacturer_name?: string
+  mpn: string
+  description?: string
+  datasheet_url?: string
+  created_at: string
+  supplier_parts: SupplierPart[]
 }
 
 export interface PartInput {
@@ -363,6 +409,26 @@ export const api = {
   },
   listLocationStock(id: string) {
     return request<StockItem[]>(`/locations/${id}/stock`)
+  },
+
+  // ── Manufacturer / supplier parts ───────────────────────────────────────────
+  listManufacturers() {
+    return request<Manufacturer[]>('/manufacturers')
+  },
+  listSuppliers() {
+    return request<Supplier[]>('/suppliers')
+  },
+  createManufacturerPart(partID: string, body: { manufacturer: string; mpn: string; datasheet_url?: string | null }) {
+    return request<ManufacturerPart>(`/parts/${partID}/manufacturer-parts`, { method: 'POST', body: JSON.stringify(body) })
+  },
+  deleteManufacturerPart(id: string) {
+    return request<{ status: string }>(`/manufacturer-parts/${id}`, { method: 'DELETE' })
+  },
+  createSupplierPart(mfgPartID: string, body: { supplier_id: string; sku: string; packaging?: string | null; moq?: number | null; url?: string | null; pricing: PriceBreak[] }) {
+    return request<{ id: string }>(`/manufacturer-parts/${mfgPartID}/supplier-parts`, { method: 'POST', body: JSON.stringify(body) })
+  },
+  deleteSupplierPart(id: string) {
+    return request<{ status: string }>(`/supplier-parts/${id}`, { method: 'DELETE' })
   },
 
   // ── Dashboard ───────────────────────────────────────────────────────────────

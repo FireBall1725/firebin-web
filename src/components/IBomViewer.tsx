@@ -263,10 +263,17 @@ function drawBoard(
   ctx.fillStyle = silkColor
   for (const s of pcb.drawings?.silkscreen?.F ?? []) drawSilk(ctx, s)
 
-  // Pads (placed footprints dimmed).
+  // Pads in two passes (placed footprints dimmed): all copper first, then all
+  // drill holes — otherwise a pad drawn later paints over an earlier pad's hole.
   for (const f of pcb.footprints) {
     ctx.globalAlpha = placed.has(f.ref.toUpperCase()) ? 0.22 : 1
-    for (const p of f.pads ?? []) drawPad(ctx, p, padColor, holeColor)
+    ctx.fillStyle = padColor
+    for (const p of f.pads ?? []) fillPadCopper(ctx, p)
+  }
+  for (const f of pcb.footprints) {
+    ctx.globalAlpha = placed.has(f.ref.toUpperCase()) ? 0.22 : 1
+    ctx.fillStyle = holeColor
+    for (const p of f.pads ?? []) if (p.type === 'th' && p.drillsize) punchPadHole(ctx, p)
   }
   ctx.globalAlpha = 1
 
@@ -344,22 +351,27 @@ function drawSilk(ctx: CanvasRenderingContext2D, d: Drawing) {
   strokeDrawing(ctx, d)
 }
 
-// drawPad fills a pad in its shape, punching a drill hole for through-hole pads.
-function drawPad(ctx: CanvasRenderingContext2D, p: Pad, padColor: string, holeColor: string) {
+// fillPadCopper fills a pad's copper shape (fillStyle set by the caller).
+function fillPadCopper(ctx: CanvasRenderingContext2D, p: Pad) {
   const [w, h] = p.size
   ctx.save()
   ctx.translate(p.pos[0], p.pos[1])
   ctx.rotate((-p.angle * Math.PI) / 180)
-  ctx.fillStyle = padColor
   padPath(ctx, p, w, h)
   ctx.fill()
-  if (p.type === 'th' && p.drillsize) {
-    ctx.fillStyle = holeColor
-    ctx.beginPath()
-    if (p.drillshape === 'oval') roundRect(ctx, -p.drillsize[0] / 2, -p.drillsize[1] / 2, p.drillsize[0], p.drillsize[1], Math.min(p.drillsize[0], p.drillsize[1]) / 2)
-    else ctx.arc(0, 0, p.drillsize[0] / 2, 0, Math.PI * 2)
-    ctx.fill()
-  }
+  ctx.restore()
+}
+
+// punchPadHole clears a through-hole pad's drill (fillStyle set by the caller).
+function punchPadHole(ctx: CanvasRenderingContext2D, p: Pad) {
+  const d = p.drillsize as [number, number]
+  ctx.save()
+  ctx.translate(p.pos[0], p.pos[1])
+  ctx.rotate((-p.angle * Math.PI) / 180)
+  ctx.beginPath()
+  if (p.drillshape === 'oval') roundRect(ctx, -d[0] / 2, -d[1] / 2, d[0], d[1], Math.min(d[0], d[1]) / 2)
+  else ctx.arc(0, 0, d[0] / 2, 0, Math.PI * 2)
+  ctx.fill()
   ctx.restore()
 }
 

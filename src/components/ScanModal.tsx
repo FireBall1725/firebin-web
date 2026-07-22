@@ -212,7 +212,7 @@ function ScanResultView({
 }) {
   const { parsed, match } = result
   const [qty, setQty] = useState(parsed.quantity > 0 ? String(parsed.quantity) : '')
-  const [name, setName] = useState(parsed.mpn)
+  const [name, setName] = useState('')
   const [locationID, setLocationID] = useState('')
   const [locations, setLocations] = useState<StorageLocation[]>([])
   const [busy, setBusy] = useState(false)
@@ -239,9 +239,10 @@ function ScanResultView({
   }
 
   const createNew = async () => {
+    if (!name.trim()) return
     setBusy(true)
     try {
-      const part = await api.createPart({ name: name.trim() || parsed.mpn })
+      const part = await api.createPart({ name: name.trim() })
       if (parsed.mpn) {
         await api.createManufacturerPart(part.id, { manufacturer: '', mpn: parsed.mpn })
       }
@@ -288,17 +289,17 @@ function ScanResultView({
       ) : (
         <div>
           <p style={{ marginTop: 0, fontSize: 13.5 }} className="c-dim">
-            No part with this MPN yet. Create one:
+            No part with this MPN yet. Name the part — <span className="mono">{parsed.mpn}</span> becomes a manufacturer part under it.
           </p>
           <label className="fieldlabel"><span>Part name</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Part name" />
+            <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="e.g. 4.7µF Capacitor 1206" />
           </label>
           <div style={{ marginTop: 10 }}>
             <QtyLoc qty={qty} setQty={setQty} locationID={locationID} setLocationID={setLocationID} locations={locations} />
           </div>
           <div className="flex gap-2" style={{ marginTop: 12 }}>
             <button className="btn" onClick={onRescan}>Scan again</button>
-            <button className="btn primary" style={{ flex: 1, justifyContent: 'center' }} disabled={busy} onClick={createNew}>
+            <button className="btn primary" style={{ flex: 1, justifyContent: 'center' }} disabled={busy || !name.trim()} onClick={createNew}>
               Create part &amp; add stock
             </button>
           </div>

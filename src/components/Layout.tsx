@@ -2,6 +2,7 @@
 // Copyright (C) 2026 FireBall1725
 
 import { useState } from 'react'
+import { ScanModal } from './ScanModal'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 
@@ -129,38 +130,7 @@ export function Layout() {
         </main>
       </div>
 
-      {scanOpen && <ScanStub onClose={() => setScanOpen(false)} />}
-    </div>
-  )
-}
-
-// Placeholder scan modal. The real EIGP 114 barcode intake flow is wired later;
-// this shows the intended entry point without faking a result.
-function ScanStub({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-h">
-          {icon('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8')}
-          <h3>Scan intake</h3>
-          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            {icon('M18 6 6 18M6 6l12 12')}
-          </button>
-        </div>
-        <div className="modal-b">
-          <div className="empty">
-            Point a scanner (or the phone camera on mobile) at a Digi-Key / Mouser / LCSC bag. The
-            EIGP&nbsp;114 Data Matrix decodes to an MPN and quantity, then enriches and adds stock in
-            one tap.
-            <div className="eyebrow" style={{ marginTop: 12 }}>Wiring in progress</div>
-          </div>
-        </div>
-        <div className="modal-f">
-          <button className="btn" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
+      {scanOpen && <ScanModal onClose={() => setScanOpen(false)} />}
     </div>
   )
 }

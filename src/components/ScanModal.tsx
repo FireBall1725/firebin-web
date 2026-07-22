@@ -24,6 +24,37 @@ const READ_OPTS: ReaderOptions = {
   maxNumberOfSymbols: 1,
 }
 
+// preprocess converts a frame to grayscale and stretches its contrast in place.
+// Phone captures of distributor bags often have a heavy colour cast (pink/purple
+// white balance) and low contrast that defeats the decoder even though the code
+// looks clear; greyscale + contrast-stretch is what makes it lock in. Uses a
+// small percentile clip so a glare highlight doesn't blow out the range.
+function preprocess(img: ImageData): void {
+  const d = img.data
+  const n = d.length / 4
+  const lum = new Uint8Array(n)
+  const hist = new Uint32Array(256)
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+    const g = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0
+    lum[j] = g
+    hist[g]++
+  }
+  // 2% / 98% percentile bounds for a robust stretch.
+  const clip = Math.floor(n * 0.02)
+  let lo = 0
+  let hi = 255
+  let acc = 0
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > clip) { lo = v; break } }
+  acc = 0
+  for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > clip) { hi = v; break } }
+  const range = Math.max(1, hi - lo)
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+    let v = ((lum[j] - lo) * 255) / range
+    v = v < 0 ? 0 : v > 255 ? 255 : v
+    d[i] = d[i + 1] = d[i + 2] = v | 0
+  }
+}
+
 // Decode the raw bytes (preserving the GS/RS control chars EIGP 114 relies on).
 function resultText(r: { bytes: Uint8Array; text: string }): string {
   try {
@@ -90,11 +121,10 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
             const ctx = canvas.getContext('2d')
             if (ctx) {
               ctx.drawImage(vid, sx, sy, cw, ch, 0, 0, cw, ch)
+              const frame = ctx.getImageData(0, 0, cw, ch)
+              preprocess(frame) // greyscale + contrast-stretch to beat colour cast
               try {
-                const results = await readBarcodes(
-                  ctx.getImageData(0, 0, cw, ch),
-                  READ_OPTS,
-                )
+                const results = await readBarcodes(frame, READ_OPTS)
                 if (results.length && !stopped) {
                   handleCode(resultText(results[0]))
                   return
@@ -137,7 +167,25 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setCamError(null)
     try {
-      const results = await readBarcodes(file, READ_OPTS)
+      // Try a greyscale + contrast-stretched version first (beats the colour
+      // cast phone photos of bags have), then fall back to the raw image.
+      let results: Awaited<ReturnType<typeof readBarcodes>> = []
+      try {
+        const bmp = await createImageBitmap(file)
+        const c = document.createElement('canvas')
+        c.width = bmp.width
+        c.height = bmp.height
+        const cx = c.getContext('2d')
+        if (cx) {
+          cx.drawImage(bmp, 0, 0)
+          const img = cx.getImageData(0, 0, c.width, c.height)
+          preprocess(img)
+          results = await readBarcodes(img, READ_OPTS)
+        }
+      } catch {
+        // fall through to raw decode
+      }
+      if (!results.length) results = await readBarcodes(file, READ_OPTS)
       if (results.length) {
         await handleCode(resultText(results[0]))
       } else {

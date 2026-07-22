@@ -35,8 +35,9 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
       <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mb-6 text-center">
+          <img src="/firelabs-mark.png" alt="" className="mx-auto mb-2 h-14 w-14" />
           <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-            <span className="text-amber-500">⬢</span> FireBin
+            FireBin
           </div>
           <p className="mt-1 text-sm text-zinc-500">Electronics component inventory</p>
         </div>

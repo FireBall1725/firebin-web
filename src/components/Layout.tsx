@@ -18,7 +18,8 @@ export function Layout() {
     <div className="flex min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <aside className="flex w-56 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center gap-2 px-5 py-4 text-lg font-semibold">
-          <span className="text-amber-500">⬢</span> FireBin
+          <img src="/firelabs-mark.png" alt="" className="h-7 w-7" />
+          FireBin
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {nav.map((item) => (

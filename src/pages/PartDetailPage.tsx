@@ -110,8 +110,8 @@ export function PartDetailPage() {
               <tbody>
                 {part.parameters.map((p) => (
                   <tr key={p.id}>
-                    <td className="c-dim">{p.template_name}</td>
-                    <td className="num c-text">
+                    <td className="c-dim" style={{ width: '45%' }}>{p.template_name}</td>
+                    <td className="num c-text" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
                       {p.value}
                       {p.units ? ` ${p.units}` : ''}
                     </td>

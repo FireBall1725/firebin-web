@@ -10,6 +10,7 @@ import { TokensPage } from './pages/TokensPage'
 import { PartsPage } from './pages/PartsPage'
 import { PartDetailPage } from './pages/PartDetailPage'
 import { LocationsPage } from './pages/LocationsPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 export function App() {
   return (
@@ -22,6 +23,7 @@ export function App() {
           <Route path="parts/:id" element={<PartDetailPage />} />
           <Route path="locations" element={<LocationsPage />} />
           <Route path="tokens" element={<TokensPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>
     </Routes>

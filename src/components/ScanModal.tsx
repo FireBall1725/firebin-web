@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { readBarcodes, prepareZXingModule, type ReaderOptions } from 'zxing-wasm/reader'
 import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'
-import { api, type ScanResult, type StorageLocation } from '../lib/api'
+import { api, type ScanResult, type StorageLocation, type EnrichedPart } from '../lib/api'
 import { num } from '../lib/format'
 
 // Point the WASM loader at the bundled, same-origin wasm (self-hosted / offline
@@ -216,10 +216,29 @@ function ScanResultView({
   const [locationID, setLocationID] = useState('')
   const [locations, setLocations] = useState<StorageLocation[]>([])
   const [busy, setBusy] = useState(false)
+  const [enriched, setEnriched] = useState<EnrichedPart | null>(null)
+  const [enriching, setEnriching] = useState(false)
 
   useEffect(() => {
     api.listLocations().then(setLocations).catch(() => undefined)
   }, [])
+
+  // On a no-match scan, look the MPN up (Nexar/Octopart) to auto-name and fill
+  // parameters. Silently no-ops if enrichment isn't configured or finds nothing.
+  useEffect(() => {
+    if (match || !parsed.mpn) return
+    setEnriching(true)
+    api
+      .enrich(parsed.mpn)
+      .then((r) => {
+        if (r.found && r.part) {
+          setEnriched(r.part)
+          setName(r.part.name)
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setEnriching(false))
+  }, [match, parsed.mpn])
 
   const note = `scan${parsed.customer_part ? ' · ' + parsed.customer_part : ''}`
 
@@ -242,9 +261,18 @@ function ScanResultView({
     if (!name.trim()) return
     setBusy(true)
     try {
-      const part = await api.createPart({ name: name.trim() })
+      const part = await api.createPart({
+        name: name.trim(),
+        package: enriched?.package || null,
+        description: enriched?.description || null,
+        parameters: enriched?.parameters.map((p) => ({ name: p.name, value: p.value })) ?? [],
+      })
       if (parsed.mpn) {
-        await api.createManufacturerPart(part.id, { manufacturer: '', mpn: parsed.mpn })
+        await api.createManufacturerPart(part.id, {
+          manufacturer: enriched?.manufacturer || '',
+          mpn: parsed.mpn,
+          datasheet_url: enriched?.datasheet_url || null,
+        })
       }
       const q = parseFloat(qty)
       if (!isNaN(q) && q > 0) {
@@ -288,9 +316,31 @@ function ScanResultView({
         </div>
       ) : (
         <div>
-          <p style={{ marginTop: 0, fontSize: 13.5 }} className="c-dim">
-            No part with this MPN yet. Name the part — <span className="mono">{parsed.mpn}</span> becomes a manufacturer part under it.
-          </p>
+          {enriching && (
+            <p style={{ marginTop: 0, fontSize: 13 }} className="c-dim">Looking up part data…</p>
+          )}
+          {enriched ? (
+            <div className="card" style={{ boxShadow: 'none', marginTop: 0, marginBottom: 12 }}>
+              <div style={{ padding: 12 }}>
+                <span className="eyebrow">Auto-filled from Octopart</span>
+                <div className="flex flex-wrap gap-2" style={{ marginTop: 6 }}>
+                  {enriched.manufacturer && <span className="pill ghost">{enriched.manufacturer}</span>}
+                  {enriched.category && <span className="tag">{enriched.category}</span>}
+                  {enriched.package && <span className="tag">{enriched.package}</span>}
+                  {enriched.parameters.length > 0 && <span className="tag">{enriched.parameters.length} params</span>}
+                  {enriched.datasheet_url && (
+                    <a href={enriched.datasheet_url} target="_blank" rel="noreferrer" className="tag" style={{ color: 'var(--accent)' }}>datasheet ↗</a>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            !enriching && (
+              <p style={{ marginTop: 0, fontSize: 13.5 }} className="c-dim">
+                No part with this MPN yet. Name it — <span className="mono">{parsed.mpn}</span> becomes a manufacturer part under it.
+              </p>
+            )
+          )}
           <label className="fieldlabel"><span>Part name</span>
             <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="e.g. 4.7µF Capacitor 1206" />
           </label>

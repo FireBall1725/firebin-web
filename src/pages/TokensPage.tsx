@@ -34,73 +34,58 @@ export function TokensPage() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold">API Tokens</h1>
-      <p className="mt-1 text-zinc-500">
-        Personal access tokens (<code className="text-xs">fbin_pat_…</code>) for scripts,
-        the MCP server, and integrations.
+    <div style={{ maxWidth: 720 }}>
+      <span className="eyebrow">Settings</span>
+      <h1 className="c-text" style={{ fontSize: 22, fontWeight: 650, letterSpacing: '-0.02em', margin: '2px 0 4px' }}>
+        API Tokens
+      </h1>
+      <p className="c-dim text-sm">
+        Personal access tokens (<span className="mono c-accent">fbin_pat_…</span>) for scripts, the MCP
+        server, and integrations.
       </p>
 
       {created && (
-        <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/40">
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+        <div className="banner mt-5">
+          <p className="c-warn text-sm" style={{ fontWeight: 600 }}>
             Copy this token now — it won't be shown again.
           </p>
-          <code className="mt-2 block break-all rounded bg-white px-3 py-2 font-mono text-sm dark:bg-zinc-900">
+          <code className="mono bg-panel bd mt-2 block break-all" style={{ borderRadius: 8, padding: '10px 12px', fontSize: 13 }}>
             {created}
           </code>
-          <button
-            onClick={() => setCreated(null)}
-            className="mt-2 text-xs text-amber-700 hover:underline dark:text-amber-400"
-          >
+          <button onClick={() => setCreated(null)} className="link mt-2" style={{ fontSize: 12 }}>
             Done
           </button>
         </div>
       )}
 
-      <div className="mt-6 flex gap-2">
+      <div className="mt-5 flex gap-2">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && create()}
           placeholder="Token name (e.g. my-laptop)"
-          className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500 dark:border-zinc-700 dark:bg-zinc-800"
+          className="input"
         />
-        <button
-          onClick={create}
-          className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
-        >
-          Create
-        </button>
+        <button onClick={create} className="btn primary">Create</button>
       </div>
-      {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="c-crit mt-2 text-sm">{error}</p>}
 
-      <div className="mt-6 divide-y divide-zinc-200 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-        {tokens.length === 0 && (
-          <p className="p-4 text-sm text-zinc-500">No tokens yet.</p>
-        )}
+      <div className="card mt-5">
+        {tokens.length === 0 && <p className="c-faint p-4 text-sm">No tokens yet.</p>}
         {tokens.map((t) => (
-          <div key={t.id} className="flex items-center justify-between p-4">
+          <div key={t.id} className="flex items-center justify-between bd-b px-4 py-3">
             <div>
-              <div className="font-medium">
+              <div className="c-text" style={{ fontWeight: 600 }}>
                 {t.name}
-                {t.revoked_at && (
-                  <span className="ml-2 text-xs text-red-500">revoked</span>
-                )}
+                {t.revoked_at && <span className="pill low" style={{ marginLeft: 8 }}>revoked</span>}
               </div>
-              <div className="text-xs text-zinc-500">
-                fbin_pat_…{t.token_suffix} · created{' '}
-                {new Date(t.created_at).toLocaleDateString()}
-                {t.last_used_at &&
-                  ` · last used ${new Date(t.last_used_at).toLocaleDateString()}`}
+              <div className="mono c-faint" style={{ fontSize: 11, marginTop: 2 }}>
+                fbin_pat_…{t.token_suffix} · created {new Date(t.created_at).toLocaleDateString()}
+                {t.last_used_at && ` · last used ${new Date(t.last_used_at).toLocaleDateString()}`}
               </div>
             </div>
             {!t.revoked_at && (
-              <button
-                onClick={() => revoke(t.id)}
-                className="text-sm text-zinc-500 hover:text-red-600"
-              >
-                Revoke
-              </button>
+              <button onClick={() => revoke(t.id)} className="btn sm danger">Revoke</button>
             )}
           </div>
         ))}

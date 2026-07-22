@@ -8,12 +8,14 @@
     <meta name="description" content="FireBin — self-hosted electronics component inventory." />
     <title>FireBin</title>
     <script>
-      // Apply the saved (or system) theme before paint to avoid a flash.
+      // Apply the saved theme before paint to avoid a flash. When nothing is
+      // stored we leave data-theme unset so the CSS prefers-color-scheme
+      // default wins; the toggle writes 'light' | 'dark' to localStorage.
       (function () {
         try {
           var t = localStorage.getItem('theme')
-          if (t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark')
+          if (t === 'dark' || t === 'light') {
+            document.documentElement.setAttribute('data-theme', t)
           }
         } catch (e) {}
       })()

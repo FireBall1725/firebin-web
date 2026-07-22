@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Part, type Category } from '../lib/api'
 import { NewPartModal } from '../components/NewPartModal'
-import { stockClass } from '../lib/format'
+import { num } from '../lib/format'
 import { useRealtime } from '../lib/useRealtime'
 
 export function PartsPage() {
@@ -59,65 +59,61 @@ export function PartsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Parts</h1>
-        <button
-          onClick={() => setShowNew(true)}
-          className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
-        >
-          + New part
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <div>
+          <span className="eyebrow">Inventory</span>
+          <h1 className="c-text" style={{ fontSize: 22, fontWeight: 650, letterSpacing: '-0.02em', margin: '2px 0 0' }}>
+            Parts
+          </h1>
+        </div>
+        <button onClick={() => setShowNew(true)} className="btn primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+          New part
         </button>
       </div>
 
-      <div className="mt-6 flex gap-6">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,200px) 1fr' }}>
         {/* Category rail */}
-        <aside className="w-44 shrink-0">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-            Categories
-          </div>
-          <button
-            onClick={() => setCategory(undefined)}
-            className={railClass(category === undefined)}
-          >
-            All parts
+        <aside className="card self-start" style={{ position: 'sticky', top: 84 }}>
+          <div className="card-h"><h2>Categories</h2></div>
+          <button onClick={() => setCategory(undefined)} className={`cat ${category === undefined ? 'on' : ''}`}>
+            <span>All parts</span>
           </button>
           {categories.map((c) => (
-            <button key={c.id} onClick={() => setCategory(c.id)} className={railClass(category === c.id)}>
-              {c.name}
+            <button key={c.id} onClick={() => setCategory(c.id)} className={`cat ${category === c.id ? 'on' : ''}`}>
+              <span>{c.name}</span>
             </button>
           ))}
         </aside>
 
         {/* Table */}
-        <div className="min-w-0 flex-1">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search parts, keywords, MPN…"
-            className="mb-4 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500 dark:border-zinc-700 dark:bg-zinc-800"
-          />
+        <div className="min-w-0">
+          <div className="search mb-3" style={{ marginLeft: 0, width: '100%', maxWidth: 'none' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search parts, keywords, MPN…" />
+          </div>
 
-          <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Package</th>
-                  <th className="px-4 py-2 text-right font-medium">Variants</th>
-                  <th className="px-4 py-2 text-right font-medium">In stock</th>
+                  <th>Part / variant</th>
+                  <th>Package</th>
+                  <th className="num">Variants</th>
+                  <th className="num">In stock</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+              <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-zinc-400">
+                    <td colSpan={4} className="c-faint" style={{ textAlign: 'center', padding: '32px' }}>
                       Loading…
                     </td>
                   </tr>
                 )}
                 {!loading && parts.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-zinc-400">
+                    <td colSpan={4} className="c-faint" style={{ textAlign: 'center', padding: '32px' }}>
                       No parts yet. Add your first with “New part”.
                     </td>
                   </tr>
@@ -139,7 +135,7 @@ export function PartsPage() {
                     if (kids === 'loading') {
                       rows.push(
                         <tr key={p.id + '-l'}>
-                          <td colSpan={4} className="px-4 py-2 pl-12 text-xs text-zinc-400">
+                          <td colSpan={4} className="c-faint" style={{ paddingLeft: 40, fontSize: 12 }}>
                             Loading variants…
                           </td>
                         </tr>,
@@ -147,12 +143,7 @@ export function PartsPage() {
                     } else if (Array.isArray(kids)) {
                       kids.forEach((v) =>
                         rows.push(
-                          <PartRow
-                            key={v.id}
-                            part={v}
-                            variant
-                            onOpen={() => navigate(`/parts/${v.id}`)}
-                          />,
+                          <PartRow key={v.id} part={v} variant onOpen={() => navigate(`/parts/${v.id}`)} />,
                         ),
                       )
                     }
@@ -193,41 +184,37 @@ function PartRow({
   onToggle?: () => void
   onOpen: () => void
 }) {
+  const low = part.total_stock <= 0 || (part.minimum_stock > 0 && part.total_stock <= part.minimum_stock)
   return (
-    <tr className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-      <td className={`px-4 py-2 ${variant ? 'pl-12' : ''}`}>
+    <tr className={isTemplate ? 'tmpl-row' : 'hoverable'}>
+      <td style={variant ? { paddingLeft: 34 } : undefined}>
         <div className="flex items-center gap-1.5">
           {isTemplate ? (
             <button
               onClick={onToggle}
-              className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              className="chev"
+              style={{ border: 'none', background: 'none', cursor: 'pointer' }}
               aria-label={expanded ? 'Collapse' : 'Expand'}
             >
               {expanded ? '▾' : '▸'}
             </button>
           ) : (
-            <span className="inline-block w-5" />
+            <span style={{ display: 'inline-block', width: 14 }} />
           )}
-          <button onClick={onOpen} className="text-left hover:text-amber-600 dark:hover:text-amber-400">
+          <button onClick={onOpen} className="c-text" style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
             {part.name}
           </button>
         </div>
       </td>
-      <td className="px-4 py-2 font-mono text-xs text-zinc-500">{part.package || '—'}</td>
-      <td className="px-4 py-2 text-right font-mono text-xs text-zinc-500">
-        {isTemplate ? part.variant_count : ''}
-      </td>
-      <td className={`px-4 py-2 text-right font-mono ${stockClass(part.total_stock, part.minimum_stock)}`}>
-        {part.total_stock}
+      <td>{part.package ? <span className="tag">{part.package}</span> : <span className="c-faint">—</span>}</td>
+      <td className="num c-faint">{isTemplate ? part.variant_count : ''}</td>
+      <td className="num">
+        {isTemplate ? (
+          <span className="c-dim">{num(part.total_stock)}</span>
+        ) : (
+          <span className={low ? 'c-crit' : 'c-text'} style={{ fontWeight: low ? 600 : 400 }}>{num(part.total_stock)}</span>
+        )}
       </td>
     </tr>
   )
-}
-
-function railClass(active: boolean) {
-  return `mb-0.5 block w-full truncate rounded px-2 py-1.5 text-left text-sm ${
-    active
-      ? 'bg-amber-500/10 font-medium text-amber-600 dark:text-amber-400'
-      : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
-  }`
 }

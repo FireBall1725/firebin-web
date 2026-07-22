@@ -36,39 +36,46 @@ export function LocationsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Locations</h1>
-        <button onClick={() => setShowNew(true)} className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">
-          + New location
+      <div className="mb-5 flex items-center justify-between">
+        <div>
+          <span className="eyebrow">Inventory</span>
+          <h1 className="c-text" style={{ fontSize: 22, fontWeight: 650, letterSpacing: '-0.02em', margin: '2px 0 0' }}>
+            Locations
+          </h1>
+        </div>
+        <button onClick={() => setShowNew(true)} className="btn primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+          New location
         </button>
       </div>
 
-      <div className="mt-6 flex gap-6">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,280px) 1fr' }}>
         {/* Bin list */}
-        <aside className="w-64 shrink-0">
-          <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
-            {locations.length === 0 && <p className="p-4 text-sm text-zinc-400">No locations yet.</p>}
-            {locations.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => setSelected(l)}
-                className={`flex w-full items-center justify-between border-b border-zinc-100 px-4 py-2.5 text-left text-sm last:border-0 dark:border-zinc-800/60 ${
-                  selected?.id === l.id ? 'bg-amber-500/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
-                }`}
-              >
-                <span>{l.name}</span>
-                {l.barcode && <span className="font-mono text-xs text-zinc-400">{l.barcode}</span>}
-              </button>
-            ))}
-          </div>
+        <aside className="card self-start">
+          <div className="card-h"><h2>Storage tree</h2></div>
+          {locations.length === 0 && <p className="c-faint p-4 text-sm">No locations yet.</p>}
+          {locations.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => setSelected(l)}
+              className={`cat ${selected?.id === l.id ? 'on' : ''}`}
+              style={{ justifyContent: 'space-between' }}
+            >
+              <span className="flex items-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h16l-1 13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1Z" /><path d="M9 7V4h6v3" /></svg>
+                {l.name}
+              </span>
+              {l.barcode && <span className="mono c-faint" style={{ fontSize: 11 }}>{l.barcode}</span>}
+            </button>
+          ))}
         </aside>
 
         {/* Contents */}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           {selected ? (
             <BinContents location={selected} contents={contents} onChanged={loadLocations} onDeselect={() => setSelected(null)} />
           ) : (
-            <p className="text-sm text-zinc-400">Select a location to see its contents.</p>
+            <p className="c-faint text-sm">Select a location to see its contents.</p>
           )}
         </div>
       </div>
@@ -109,58 +116,47 @@ function BinContents({
   }
 
   return (
-    <div>
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">{location.name}</h2>
-          <div className="mt-1 flex items-center gap-2 text-sm text-zinc-500">
-            {location.barcode && (
-              <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono text-xs dark:bg-zinc-800">{location.barcode}</span>
-            )}
-            <span>{contents.length} distinct parts · {num(total)} units</span>
-          </div>
+    <div className="card">
+      <div className="card-h">
+        <div className="min-w-0">
+          <span className="eyebrow">Bin</span>
+          <h2 className="mono" style={{ color: 'var(--accent)', fontSize: 15, marginTop: 1 }}>{location.name}</h2>
         </div>
-        <div className="flex gap-3 text-sm">
-          <button onClick={() => setEdit(true)} className="text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400">
-            Edit
-          </button>
-          <button onClick={del} className="text-zinc-400 hover:text-red-500">
-            Delete
-          </button>
+        <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
+          {location.barcode && <span className="tag">{location.barcode}</span>}
+          <span className="pill ghost">{contents.length} parts · {num(total)} units</span>
+          <button onClick={() => setEdit(true)} className="btn sm">Edit</button>
+          <button onClick={del} className="btn sm danger">Delete</button>
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Part</th>
+            <th>Batch</th>
+            <th className="num">Quantity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {contents.length === 0 && (
             <tr>
-              <th className="px-4 py-2 font-medium">Part</th>
-              <th className="px-4 py-2 font-medium">Batch</th>
-              <th className="px-4 py-2 text-right font-medium">Quantity</th>
+              <td colSpan={3} className="c-faint" style={{ textAlign: 'center', padding: 24 }}>
+                This bin is empty.
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-            {contents.length === 0 && (
-              <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-zinc-400">
-                  This bin is empty.
-                </td>
-              </tr>
-            )}
-            {contents.map((s) => (
-              <tr key={s.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                <td className="px-4 py-2">
-                  <Link to={`/parts/${s.part_id}`} className="hover:text-amber-600 dark:hover:text-amber-400">
-                    {s.part_name}
-                  </Link>
-                </td>
-                <td className="px-4 py-2 font-mono text-xs text-zinc-500">{s.batch || '—'}</td>
-                <td className="px-4 py-2 text-right font-mono">{num(s.quantity)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          )}
+          {contents.map((s) => (
+            <tr key={s.id} className="hoverable">
+              <td>
+                <Link to={`/parts/${s.part_id}`} className="c-text">{s.part_name}</Link>
+              </td>
+              <td className="mono c-faint">{s.batch || '—'}</td>
+              <td className="num c-text">{num(s.quantity)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       {edit && (
         <LocationModal
@@ -208,32 +204,32 @@ function LocationModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold">{existing ? 'Edit location' : 'New location'}</h2>
-        <div className="mt-4 space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Name</span>
-            <input className={inputCls} value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="A3-04" />
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-h">
+          <h3>{existing ? 'Edit location' : 'New location'}</h3>
+          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="modal-b space-y-3">
+          <label className="fieldlabel">
+            <span>Name</span>
+            <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="A3-04" />
           </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Barcode (optional)</span>
-            <input className={inputCls} value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="FB-A304" />
+          <label className="fieldlabel">
+            <span>Barcode (optional)</span>
+            <input className="input" value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="FB-A304" />
           </label>
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <button onClick={onClose} className="rounded-md px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800">
-              Cancel
-            </button>
-            <button onClick={save} disabled={busy} className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50">
-              {busy ? '…' : 'Save'}
-            </button>
-          </div>
+          {error && <p className="c-crit text-sm">{error}</p>}
+        </div>
+        <div className="modal-f">
+          <button onClick={onClose} className="btn">Cancel</button>
+          <button onClick={save} disabled={busy} className="btn primary">
+            {busy ? '…' : 'Save'}
+          </button>
         </div>
       </div>
     </div>
   )
 }
-
-const inputCls =
-  'w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500 dark:border-zinc-700 dark:bg-zinc-800'

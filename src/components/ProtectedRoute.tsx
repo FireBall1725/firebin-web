@@ -8,7 +8,7 @@ export function ProtectedRoute() {
   const { user, loading } = useAuth()
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-zinc-500">
+      <div className="bg-app c-faint flex min-h-screen items-center justify-center">
         Loading…
       </div>
     )

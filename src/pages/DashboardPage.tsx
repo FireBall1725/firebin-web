@@ -4,12 +4,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type Stats, type Part, type StockTransaction } from '../lib/api'
-import { useAuth } from '../auth/AuthContext'
 import { useRealtime } from '../lib/useRealtime'
-import { num, stockClass } from '../lib/format'
+import { num } from '../lib/format'
 
 export function DashboardPage() {
-  const { user } = useAuth()
   const [stats, setStats] = useState<Stats | null>(null)
   const [low, setLow] = useState<Part[]>([])
   const [recent, setRecent] = useState<StockTransaction[]>([])
@@ -23,106 +21,154 @@ export function DashboardPage() {
   useEffect(load, [load])
   useRealtime(['parts', 'stock', 'locations'], load)
 
+  const fmtValue = (n: number) =>
+    n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <p className="mt-1 text-zinc-500">
-        Signed in as <span className="font-medium">{user?.username}</span>
-        {user?.is_instance_admin && (
-          <span className="ml-2 rounded bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-            admin
-          </span>
-        )}
-      </p>
-
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Parts" value={stats ? num(stats.parts_count) : '…'} hint={stats ? `${stats.variants_count} variants` : ''} />
-        <Stat label="Locations" value={stats ? num(stats.locations_count) : '…'} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
+          dot="var(--accent)"
+          label="Total parts"
+          value={stats ? num(stats.parts_count) : '…'}
+          delta={stats ? `${num(stats.variants_count)} variants` : ''}
+        />
+        <Stat
+          dot="var(--dim)"
+          label="Storage bins"
+          value={stats ? num(stats.locations_count) : '…'}
+        />
+        <Stat
+          dot="var(--crit)"
           label="Low stock"
           value={stats ? num(stats.low_stock_count) : '…'}
-          accent={stats ? stats.low_stock_count > 0 : false}
+          crit={!!stats && stats.low_stock_count > 0}
         />
-        <Stat label="Units on hand" value={stats ? num(stats.total_units) : '…'} />
+        <Stat
+          dot="var(--good)"
+          label="Inventory value"
+          value={stats ? fmtValue(stats.inventory_value) : '…'}
+          delta={stats ? `${num(stats.total_units)} units on hand` : ''}
+        />
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <Panel title="Low stock">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="card">
+          <div className="card-h">
+            <h2>Reorder soon</h2>
+            {low.length > 0 && <span className="pill low" style={{ marginLeft: 'auto' }}>{low.length} parts</span>}
+          </div>
           {low.length > 0 ? (
-            <ul className="divide-y divide-zinc-100 text-sm dark:divide-zinc-800/60">
-              {low.map((p) => (
-                <li key={p.id}>
-                  <Link to={`/parts/${p.id}`} className="flex items-center justify-between py-2 hover:text-amber-600 dark:hover:text-amber-400">
-                    <span>
-                      {p.name}
-                      {p.package && <span className="ml-2 font-mono text-xs text-zinc-400">{p.package}</span>}
-                    </span>
-                    <span className="font-mono text-xs">
-                      <span className={stockClass(p.total_stock, p.minimum_stock)}>{num(p.total_stock)}</span>
-                      <span className="text-zinc-400"> / {num(p.minimum_stock)}</span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <div className="tbl-wrap" style={{ border: 'none', borderRadius: 0 }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Part</th>
+                    <th className="num">On hand</th>
+                    <th className="num">Min</th>
+                    <th>Level</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {low.map((p) => {
+                    const pct = p.minimum_stock > 0 ? Math.min(100, Math.round((p.total_stock / p.minimum_stock) * 100)) : 0
+                    const crit = p.total_stock <= 0 || pct <= 50
+                    return (
+                      <tr key={p.id} className="hoverable">
+                        <td>
+                          <Link to={`/parts/${p.id}`} className="c-text">
+                            {p.name}
+                            {p.package && <span className="tag" style={{ marginLeft: 8 }}>{p.package}</span>}
+                          </Link>
+                        </td>
+                        <td className={`num ${crit ? 'c-crit' : 'c-warn'}`}>{num(p.total_stock)}</td>
+                        <td className="num c-faint">{num(p.minimum_stock)}</td>
+                        <td style={{ width: 140 }}>
+                          <div className="bars">
+                            <div className="bar-track">
+                              <div className={`bar-fill ${crit ? 'low' : ''}`} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="mono" style={{ fontSize: 11, color: crit ? 'var(--crit)' : 'var(--warn)' }}>{pct}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <p className="text-sm text-zinc-400">Nothing below its minimum. Nice.</p>
+            <div className="p-4">
+              <p className="c-faint text-sm">Nothing below its minimum. Nice.</p>
+            </div>
           )}
-        </Panel>
+        </div>
 
-        <Panel title="Recent activity">
+        <div className="card">
+          <div className="card-h">
+            <h2>Recent activity</h2>
+            <span className="eyebrow" style={{ marginLeft: 'auto' }}>Live</span>
+          </div>
           {recent.length > 0 ? (
-            <ul className="divide-y divide-zinc-100 text-sm dark:divide-zinc-800/60">
+            <div>
               {recent.map((t) => (
-                <li key={t.id} className="flex items-center justify-between py-2">
-                  <span className="min-w-0 truncate">
+                <div key={t.id} className="flex items-center justify-between px-4 py-2.5 bd-b">
+                  <span className="min-w-0 truncate text-sm">
                     {t.part_id ? (
-                      <Link to={`/parts/${t.part_id}`} className="hover:text-amber-600 dark:hover:text-amber-400">
+                      <Link to={`/parts/${t.part_id}`} className="c-text">
                         {t.part_name}
                       </Link>
                     ) : (
-                      t.part_name
+                      <span className="c-text">{t.part_name}</span>
                     )}
-                    <span className="ml-2 font-mono text-xs uppercase text-zinc-400">{t.kind}</span>
+                    <span className="mono" style={{ marginLeft: 8, fontSize: 11, textTransform: 'uppercase', color: 'var(--faint)' }}>{t.kind}</span>
                   </span>
-                  <span className={`ml-3 shrink-0 font-mono text-xs ${t.delta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <span className={`mono shrink-0 ${t.delta >= 0 ? 'c-good' : 'c-crit'}`} style={{ fontSize: 12, marginLeft: 12 }}>
                     {t.delta >= 0 ? '+' : ''}
                     {num(t.delta)}
                   </span>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           ) : (
-            <p className="text-sm text-zinc-400">No stock movements yet.</p>
+            <div className="p-4">
+              <p className="c-faint text-sm">No stock movements yet.</p>
+            </div>
           )}
-        </Panel>
+        </div>
       </div>
 
-      <div className="mt-8 flex items-center gap-2 text-xs text-zinc-400">
-        <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-        Live — updates automatically when inventory changes
+      <div className="mt-6 flex items-center gap-2">
+        <span className="live-dot" />
+        <span className="eyebrow">Live — updates automatically when inventory changes</span>
       </div>
     </div>
   )
 }
 
-function Stat({ label, value, hint, accent }: { label: string; value: string; hint?: string; accent?: boolean }) {
+function Stat({
+  dot,
+  label,
+  value,
+  delta,
+  crit,
+}: {
+  dot: string
+  label: string
+  value: string
+  delta?: string
+  crit?: boolean
+}) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="text-sm text-zinc-500">{label}</div>
-      <div className={`mt-1 font-mono text-3xl font-semibold ${accent ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+    <div className="card stat">
+      <div className="eyebrow">
+        <span className="dot" style={{ background: dot }} />
+        {label}
+      </div>
+      <div className="val" style={crit ? { color: 'var(--crit)' } : undefined}>
         {value}
       </div>
-      {hint && <div className="mt-1 text-xs text-zinc-400">{hint}</div>}
+      {delta && <div className="delta">{delta}</div>}
     </div>
-  )
-}
-
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">{title}</h2>
-      <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">{children}</div>
-    </section>
   )
 }

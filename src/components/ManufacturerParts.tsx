@@ -40,42 +40,38 @@ export function ManufacturerParts({
   }
 
   return (
-    <section>
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Manufacturer parts</h2>
-        <button onClick={() => setAddMpn((v) => !v)} className="text-xs text-amber-600 hover:underline dark:text-amber-400">
+    <section className="card">
+      <div className="card-h">
+        <h2>Suppliers &amp; pricing</h2>
+        <button onClick={() => setAddMpn((v) => !v)} className="link" style={{ marginLeft: 'auto', fontSize: 12 }}>
           + add MPN
         </button>
       </div>
 
-      {addMpn && (
-        <div className="mb-3 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="grid grid-cols-2 gap-2">
-            <input className={inputCls} placeholder="Manufacturer (e.g. Yageo)" value={mfg} onChange={(e) => setMfg(e.target.value)} />
-            <input className={inputCls} placeholder="MPN (e.g. RC0603FR-071KL)" value={mpn} onChange={(e) => setMpn(e.target.value)} />
+      <div className="p-4">
+        {addMpn && (
+          <div className="bd bg-panel2 mb-3" style={{ borderRadius: 11, padding: 12 }}>
+            <div className="grid grid-cols-2 gap-2">
+              <input className="input" placeholder="Manufacturer (e.g. Yageo)" value={mfg} onChange={(e) => setMfg(e.target.value)} />
+              <input className="input" placeholder="MPN (e.g. RC0603FR-071KL)" value={mpn} onChange={(e) => setMpn(e.target.value)} />
+            </div>
+            <input className="input mt-2" placeholder="Datasheet URL (optional)" value={datasheet} onChange={(e) => setDatasheet(e.target.value)} />
+            <div className="mt-2 flex justify-end gap-2">
+              <button onClick={() => setAddMpn(false)} className="btn sm ghost">Cancel</button>
+              <button onClick={createMpn} className="btn sm primary">Add MPN</button>
+            </div>
           </div>
-          <input className={`${inputCls} mt-2`} placeholder="Datasheet URL (optional)" value={datasheet} onChange={(e) => setDatasheet(e.target.value)} />
-          <div className="mt-2 flex justify-end gap-2">
-            <button onClick={() => setAddMpn(false)} className="rounded px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">
-              Cancel
-            </button>
-            <button onClick={createMpn} className="rounded bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600">
-              Add MPN
-            </button>
-          </div>
-        </div>
-      )}
+        )}
 
-      {items.length === 0 && !addMpn && (
-        <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-400 dark:border-zinc-700">
-          No manufacturer parts yet. Add an MPN, or scan a distributor bag (coming soon).
-        </div>
-      )}
+        {items.length === 0 && !addMpn && (
+          <div className="empty">No manufacturer parts yet. Add an MPN, or scan a distributor bag (coming soon).</div>
+        )}
 
-      <div className="space-y-3">
-        {items.map((mp) => (
-          <MpnCard key={mp.id} mp={mp} suppliers={suppliers} onChanged={onChanged} />
-        ))}
+        <div className="space-y-3">
+          {items.map((mp) => (
+            <MpnCard key={mp.id} mp={mp} suppliers={suppliers} onChanged={onChanged} />
+          ))}
+        </div>
       </div>
     </section>
   )
@@ -85,21 +81,19 @@ function MpnCard({ mp, suppliers, onChanged }: { mp: ManufacturerPart; suppliers
   const [addSku, setAddSku] = useState(false)
 
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
+    <div className="bd" style={{ borderRadius: 11, overflow: 'hidden' }}>
+      <div className="flex items-center justify-between bd-b bg-panel2 px-4 py-2.5">
         <div className="min-w-0">
-          <span className="font-mono text-sm">{mp.mpn}</span>
-          <span className="ml-2 text-xs text-zinc-500">{mp.manufacturer_name || 'Generic'}</span>
+          <span className="mono c-text" style={{ fontSize: 13, fontWeight: 600 }}>{mp.mpn}</span>
+          <span className="c-dim" style={{ marginLeft: 8, fontSize: 12 }}>{mp.manufacturer_name || 'Generic'}</span>
           {mp.datasheet_url && (
-            <a href={mp.datasheet_url} target="_blank" rel="noreferrer" className="ml-2 text-xs text-amber-600 hover:underline dark:text-amber-400">
+            <a href={mp.datasheet_url} target="_blank" rel="noreferrer" className="link" style={{ marginLeft: 8, fontSize: 12 }}>
               datasheet ↗
             </a>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setAddSku((v) => !v)} className="text-xs text-amber-600 hover:underline dark:text-amber-400">
-            + SKU
-          </button>
+          <button onClick={() => setAddSku((v) => !v)} className="link" style={{ fontSize: 12 }}>+ SKU</button>
           <button
             onClick={async () => {
               if (confirm(`Remove MPN ${mp.mpn}?`)) {
@@ -107,30 +101,32 @@ function MpnCard({ mp, suppliers, onChanged }: { mp: ManufacturerPart; suppliers
                 onChanged()
               }
             }}
-            className="text-xs text-zinc-400 hover:text-red-500"
+            className="c-faint"
+            style={{ fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}
+            aria-label="Remove MPN"
           >
             ✕
           </button>
         </div>
       </div>
 
-      <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+      <div>
         {mp.supplier_parts.length === 0 && !addSku && (
-          <p className="px-4 py-3 text-xs text-zinc-400">No supplier SKUs.</p>
+          <p className="c-faint px-4 py-3" style={{ fontSize: 12 }}>No supplier SKUs.</p>
         )}
         {mp.supplier_parts.map((sp) => (
-          <div key={sp.id} className="flex items-start justify-between px-4 py-2.5">
+          <div key={sp.id} className="flex items-start justify-between bd-b px-4 py-2.5">
             <div className="min-w-0">
-              <div className="text-sm">
-                <span className="font-medium">{sp.supplier_name}</span>
-                <span className="ml-2 font-mono text-xs text-zinc-500">{sp.sku}</span>
-                {sp.packaging && <span className="ml-2 text-xs text-zinc-400">{sp.packaging}</span>}
+              <div style={{ fontSize: 13 }}>
+                <span className="c-text" style={{ fontWeight: 600 }}>{sp.supplier_name}</span>
+                <span className="mono c-dim" style={{ marginLeft: 8, fontSize: 12 }}>{sp.sku}</span>
+                {sp.packaging && <span className="tag" style={{ marginLeft: 8 }}>{sp.packaging}</span>}
               </div>
               {sp.pricing.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-zinc-500">
+                <div className="mono c-faint mt-1 flex flex-wrap" style={{ gap: '2px 12px', fontSize: 12 }}>
                   {sp.pricing.map((b) => (
                     <span key={b.id ?? b.quantity}>
-                      {b.quantity}: {formatPrice(b.price, b.currency)}
+                      {b.quantity}: <span className="c-dim">{formatPrice(b.price, b.currency)}</span>
                     </span>
                   ))}
                 </div>
@@ -141,7 +137,9 @@ function MpnCard({ mp, suppliers, onChanged }: { mp: ManufacturerPart; suppliers
                 await api.deleteSupplierPart(sp.id)
                 onChanged()
               }}
-              className="text-xs text-zinc-400 hover:text-red-500"
+              className="c-faint"
+              style={{ fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}
+              aria-label="Remove SKU"
             >
               ✕
             </button>
@@ -176,36 +174,33 @@ function AddSku({ mfgPartID, suppliers, onDone }: { mfgPartID: string; suppliers
   }
 
   return (
-    <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-800/40">
+    <div className="bg-panel2 px-4 py-3">
       <div className="grid grid-cols-3 gap-2">
-        <select className={inputCls} value={supplierID} onChange={(e) => setSupplierID(e.target.value)}>
+        <select className="input" value={supplierID} onChange={(e) => setSupplierID(e.target.value)}>
           {suppliers.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
-        <input className={inputCls} placeholder="SKU" value={sku} onChange={(e) => setSku(e.target.value)} />
-        <input className={inputCls} placeholder="Packaging" value={packaging} onChange={(e) => setPackaging(e.target.value)} />
+        <input className="input" placeholder="SKU" value={sku} onChange={(e) => setSku(e.target.value)} />
+        <input className="input" placeholder="Packaging" value={packaging} onChange={(e) => setPackaging(e.target.value)} />
       </div>
       <div className="mt-2">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-500">Price breaks</span>
-          <button
-            onClick={() => setBreaks((b) => [...b, { quantity: 0, price: 0, currency: 'USD' }])}
-            className="text-xs text-amber-600 hover:underline dark:text-amber-400"
-          >
+          <span className="eyebrow">Price breaks</span>
+          <button onClick={() => setBreaks((b) => [...b, { quantity: 0, price: 0, currency: 'USD' }])} className="link" style={{ fontSize: 12 }}>
             + break
           </button>
         </div>
         {breaks.map((b, i) => (
           <div key={i} className="mb-1 flex gap-2">
-            <input type="number" className={`${inputCls} w-24`} placeholder="Qty" value={b.quantity || ''} onChange={(e) => setBreak(i, { quantity: parseFloat(e.target.value) || 0 })} />
-            <input type="number" step="0.0001" className={`${inputCls} w-28`} placeholder="Unit price" value={b.price || ''} onChange={(e) => setBreak(i, { price: parseFloat(e.target.value) || 0 })} />
+            <input type="number" className="input" style={{ width: 96 }} placeholder="Qty" value={b.quantity || ''} onChange={(e) => setBreak(i, { quantity: parseFloat(e.target.value) || 0 })} />
+            <input type="number" step="0.0001" className="input" style={{ width: 112 }} placeholder="Unit price" value={b.price || ''} onChange={(e) => setBreak(i, { price: parseFloat(e.target.value) || 0 })} />
           </div>
         ))}
       </div>
       <div className="mt-2 flex justify-end gap-2">
-        <button onClick={onDone} className="rounded px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">Cancel</button>
-        <button onClick={save} className="rounded bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600">Add SKU</button>
+        <button onClick={onDone} className="btn sm ghost">Cancel</button>
+        <button onClick={save} className="btn sm primary">Add SKU</button>
       </div>
     </div>
   )
@@ -215,6 +210,3 @@ function formatPrice(price: number, currency: string) {
   const sym = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : ''
   return sym ? `${sym}${price}` : `${price} ${currency}`
 }
-
-const inputCls =
-  'w-full rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-amber-500 dark:border-zinc-700 dark:bg-zinc-800'

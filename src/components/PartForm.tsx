@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
   api,
   type Category,
@@ -21,7 +21,7 @@ export interface DraftSupplier {
 // fills the same shape so the create screen is identical either way.
 export interface PartDraft {
   name?: string
-  category_id?: string
+  category?: string
   package?: string
   description?: string
   is_template?: boolean
@@ -59,7 +59,7 @@ export function PartForm({
   onCreated: (id: string) => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
-  const [categoryID, setCategoryID] = useState(initial?.category_id ?? '')
+  const [category, setCategory] = useState(initial?.category ?? '')
   const [pkg, setPkg] = useState(initial?.package ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [isTemplate, setIsTemplate] = useState(initial?.is_template ?? false)
@@ -71,13 +71,24 @@ export function PartForm({
   const [qty, setQty] = useState(initial?.quantity ?? '')
   const [locationID, setLocationID] = useState(initial?.location_id ?? '')
   const [locations, setLocations] = useState<StorageLocation[]>([])
+  const [paramNames, setParamNames] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const suppliers = initial?.suppliers ?? []
+  // Unique datalist ids so multiple mounts don't collide.
+  const uid = useId()
+  const catListID = `cat-${uid}`
+  const paramListID = `param-${uid}`
 
   useEffect(() => {
     api.listLocations().then(setLocations).catch(() => setLocations([]))
+    // Known parameter names power the add-parameter typeahead so users reuse
+    // "Voltage Rating" instead of coining a misspelled variant.
+    api
+      .listParameterTemplates()
+      .then((t) => setParamNames(t.map((x) => x.name)))
+      .catch(() => setParamNames([]))
   }, [])
 
   const addParam = () => setParams((p) => [...p, { name: '', value: '', units: '' }])
@@ -94,9 +105,18 @@ export function PartForm({
     }
     setBusy(true)
     try {
+      // Resolve the typed category to an id, creating it if it's new. Matching
+      // an existing name (case-insensitive) avoids duplicate categories.
+      let categoryID: string | null = null
+      const catName = category.trim()
+      if (catName) {
+        const existing = categories.find((c) => c.name.toLowerCase() === catName.toLowerCase())
+        categoryID = existing ? existing.id : (await api.createCategory(catName)).id
+      }
+
       const part = await api.createPart({
         name: name.trim(),
-        category_id: categoryID || null,
+        category_id: categoryID,
         package: pkg || null,
         description: description || null,
         is_template: isTemplate,
@@ -156,14 +176,18 @@ export function PartForm({
 
         <div className="grid grid-cols-2 gap-4">
           <L label="Category">
-            <select className="input" value={categoryID} onChange={(e) => setCategoryID(e.target.value)}>
-              <option value="">None</option>
+            <input
+              className="input"
+              list={catListID}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="Type or pick…"
+            />
+            <datalist id={catListID}>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+                <option key={c.id} value={c.name} />
               ))}
-            </select>
+            </datalist>
           </L>
           <L label="Package / footprint">
             <input className="input" value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="0603" />
@@ -233,7 +257,7 @@ export function PartForm({
           <div className="space-y-2">
             {params.map((p, i) => (
               <div key={i} className="flex gap-2">
-                <input className="input" placeholder="Name" value={p.name} onChange={(e) => setParam(i, { name: e.target.value })} />
+                <input className="input" list={paramListID} placeholder="Name" value={p.name} onChange={(e) => setParam(i, { name: e.target.value })} />
                 <input className="input" placeholder="Value" value={p.value} onChange={(e) => setParam(i, { value: e.target.value })} />
                 <input className="input" style={{ width: 80 }} placeholder="Unit" value={p.units ?? ''} onChange={(e) => setParam(i, { units: e.target.value })} />
                 <button
@@ -248,6 +272,11 @@ export function PartForm({
               </div>
             ))}
           </div>
+          <datalist id={paramListID}>
+            {paramNames.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
         </div>
 
         {!isTemplate && (

@@ -221,6 +221,29 @@ export interface ScanResult {
   raw_code: string
 }
 
+export interface EnrichedPart {
+  mpn: string
+  name: string
+  description: string
+  manufacturer: string
+  category: string
+  package: string
+  datasheet_url: string
+  image_url: string
+  parameters: { name: string; value: string; units?: string }[]
+  suppliers: { name: string; sku: string; prices: PriceBreak[] }[]
+  source: string
+}
+
+export interface EnrichmentSettings {
+  provider: string
+  configured: boolean
+  client_id: string
+  secret_set: boolean
+  scope: string
+  from_env: boolean
+}
+
 const BASE = '/api/v1'
 const ACCESS_KEY = 'firebin.access'
 const REFRESH_KEY = 'firebin.refresh'
@@ -434,9 +457,24 @@ export const api = {
     return request<StockItem[]>(`/locations/${id}/stock`)
   },
 
-  // ── Scan ────────────────────────────────────────────────────────────────────
+  // ── Scan & enrichment ───────────────────────────────────────────────────────
   scan(code: string) {
     return request<ScanResult>('/scan', { method: 'POST', body: JSON.stringify({ code }) })
+  },
+  enrichStatus() {
+    return request<{ configured: boolean; provider: string }>('/enrich/status')
+  },
+  enrich(mpn: string) {
+    return request<{ found: boolean; part?: EnrichedPart }>(`/enrich?mpn=${encodeURIComponent(mpn)}`)
+  },
+  getEnrichmentSettings() {
+    return request<EnrichmentSettings>('/settings/enrichment')
+  },
+  updateEnrichmentSettings(body: { client_id?: string; client_secret?: string; scope?: string }) {
+    return request<EnrichmentSettings>('/settings/enrichment', { method: 'PUT', body: JSON.stringify(body) })
+  },
+  testEnrichment() {
+    return request<{ ok: boolean }>('/settings/enrichment/test', { method: 'POST' })
   },
 
   // ── Manufacturer / supplier parts ───────────────────────────────────────────

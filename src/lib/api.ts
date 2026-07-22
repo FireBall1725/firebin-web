@@ -198,6 +198,29 @@ export interface StockTransaction {
 
 export type AdjustKind = 'add' | 'remove' | 'count' | 'adjust'
 
+export interface EigpParsed {
+  mpn: string
+  quantity: number
+  customer_part: string
+  distributor_part: string
+  sales_order: string
+  invoice: string
+  packing_list: string
+  customer_po: string
+  date_code: string
+  lot_code: string
+  country_of_origin: string
+  distributor: string
+  fields: Record<string, string>
+}
+
+export interface ScanResult {
+  parsed: EigpParsed
+  is_eigp: boolean
+  match?: { part_id: string; part_name: string }
+  raw_code: string
+}
+
 const BASE = '/api/v1'
 const ACCESS_KEY = 'firebin.access'
 const REFRESH_KEY = 'firebin.refresh'
@@ -409,6 +432,11 @@ export const api = {
   },
   listLocationStock(id: string) {
     return request<StockItem[]>(`/locations/${id}/stock`)
+  },
+
+  // ── Scan ────────────────────────────────────────────────────────────────────
+  scan(code: string) {
+    return request<ScanResult>('/scan', { method: 'POST', body: JSON.stringify({ code }) })
   },
 
   // ── Manufacturer / supplier parts ───────────────────────────────────────────

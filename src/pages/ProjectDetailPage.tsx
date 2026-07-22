@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, type Project, type Board, type BOMLine, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { num } from '../lib/format'
+import { IBomViewer } from '../components/IBomViewer'
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams()
@@ -107,7 +108,8 @@ export function ProjectDetailPage() {
       {showUpload && (
         <UploadModal projectID={project.id} onClose={() => setShowUpload(false)} onDone={reload} />
       )}
-      {viewing && <AssetViewer asset={viewing} onClose={() => setViewing(null)} />}
+      {viewing && viewing.kind === 'ibom' && <IBomViewer asset={viewing} onClose={() => setViewing(null)} />}
+      {viewing && viewing.kind !== 'ibom' && <AssetViewer asset={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
@@ -208,8 +210,7 @@ function AssetThumb({ asset, onOpen }: { asset: ProjectAsset; onOpen: () => void
   )
 }
 
-// AssetViewer renders an asset full-screen: an image, or the iBOM in a sandboxed
-// iframe (it's self-contained HTML+JS).
+// AssetViewer renders an image asset full-screen. (iBOM assets go to IBomViewer.)
 function AssetViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => void }) {
   const [url, setUrl] = useState<string | null>(null)
 
@@ -224,28 +225,17 @@ function AssetViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => v
     return () => { revoked = true; if (objectURL) URL.revokeObjectURL(objectURL) }
   }, [asset.id])
 
-  const isIbom = asset.kind === 'ibom'
-
   return (
     <div className="overlay" onClick={onClose}>
       <div className="viewer" onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
-          <h3 className="truncate">{isIbom ? 'Interactive BOM' : asset.name}</h3>
+          <h3 className="truncate">{asset.name}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
         <div className="viewer-body">
-          {!url ? (
-            <p className="c-faint" style={{ padding: 24 }}>Loading…</p>
-          ) : isIbom ? (
-            // iBOM is self-contained but needs localStorage (view prefs) + scripts;
-            // a null-origin sandbox makes localStorage throw and it renders blank.
-            // allow-same-origin lets it run (it's the user's own trusted file).
-            <iframe title={asset.name} src={url} sandbox="allow-scripts allow-same-origin allow-popups allow-downloads" />
-          ) : (
-            <img src={url} alt={asset.name} />
-          )}
+          {!url ? <p className="c-faint" style={{ padding: 24 }}>Loading…</p> : <img src={url} alt={asset.name} />}
         </div>
       </div>
     </div>

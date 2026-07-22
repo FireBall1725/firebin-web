@@ -3,20 +3,28 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser'
-import { DecodeHintType, BarcodeFormat } from '@zxing/library'
+import { readBarcodes, prepareZXingModule, type ReaderOptions } from 'zxing-wasm/reader'
+import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'
 import { api, type ScanResult, type StorageLocation } from '../lib/api'
 import { num } from '../lib/format'
 
-// The distributor bags we target are ECC-200 Data Matrix; keep Code128 + QR too.
-function makeReader() {
-  const hints = new Map()
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-    BarcodeFormat.DATA_MATRIX,
-    BarcodeFormat.CODE_128,
-    BarcodeFormat.QR_CODE,
-  ])
-  return new BrowserMultiFormatReader(hints)
+// Point the WASM loader at the bundled, same-origin wasm (self-hosted / offline
+// safe — no CDN). zxing-cpp reads Data Matrix reliably, unlike the JS port.
+prepareZXingModule({ overrides: { locateFile: () => wasmUrl } })
+
+const READ_OPTS: ReaderOptions = {
+  formats: ['DataMatrix', 'Code128', 'QRCode'],
+  tryHarder: true,
+  maxNumberOfSymbols: 1,
+}
+
+// Decode the raw bytes (preserving the GS/RS control chars EIGP 114 relies on).
+function resultText(r: { bytes: Uint8Array; text: string }): string {
+  try {
+    return new TextDecoder().decode(r.bytes)
+  } catch {
+    return r.text
+  }
 }
 
 export function ScanModal({ onClose }: { onClose: () => void }) {
@@ -27,17 +35,16 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
   const [result, setResult] = useState<ScanResult | null>(null)
   const [manual, setManual] = useState('')
 
-  // Acquire the camera ourselves (so we control srcObject + play() explicitly),
-  // then hand the already-playing <video> to ZXing. Each effect run owns its own
-  // stream/controls and tears exactly those down, so React StrictMode's
-  // setup→cleanup→setup can't leave a detached-but-live stream (green light on,
-  // no feed).
+  // Acquire the camera ourselves (control srcObject + play() explicitly), then
+  // scan frames on a throttled loop with zxing-wasm. Each effect run owns and
+  // tears down only its own stream, so React StrictMode can't leave a
+  // detached-but-live stream (green light on, no feed).
   useEffect(() => {
-    if (result) return // stop scanning once we have a hit
-    const reader = makeReader()
+    if (result) return
     let stopped = false
     let stream: MediaStream | null = null
-    let controls: IScannerControls | null = null
+    let timer: number | undefined
+    const canvas = document.createElement('canvas')
 
     ;(async () => {
       try {
@@ -52,10 +59,33 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
         }
         v.srcObject = stream
         await v.play().catch(() => undefined)
-        controls = await reader.decodeFromVideoElement(v, (res) => {
-          if (res && !stopped) handleCode(res.getText())
-        })
-        if (stopped) controls.stop()
+
+        const tick = async () => {
+          if (stopped || !videoRef.current) return
+          const vid = videoRef.current
+          if (vid.videoWidth > 0) {
+            canvas.width = vid.videoWidth
+            canvas.height = vid.videoHeight
+            const ctx = canvas.getContext('2d')
+            if (ctx) {
+              ctx.drawImage(vid, 0, 0)
+              try {
+                const results = await readBarcodes(
+                  ctx.getImageData(0, 0, canvas.width, canvas.height),
+                  READ_OPTS,
+                )
+                if (results.length && !stopped) {
+                  handleCode(resultText(results[0]))
+                  return
+                }
+              } catch {
+                // frame miss — keep scanning
+              }
+            }
+          }
+          if (!stopped) timer = window.setTimeout(tick, 250)
+        }
+        tick()
       } catch {
         setCamError('No camera available — upload a photo or type/scan the code below.')
       }
@@ -63,7 +93,7 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
 
     return () => {
       stopped = true
-      controls?.stop()
+      clearTimeout(timer)
       stream?.getTracks().forEach((t) => t.stop())
       if (videoRef.current) videoRef.current.srcObject = null
     }
@@ -86,13 +116,15 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setCamError(null)
     try {
-      const url = URL.createObjectURL(file)
-      const reader = makeReader()
-      const res = await reader.decodeFromImageUrl(url)
-      URL.revokeObjectURL(url)
-      await handleCode(res.getText())
+      const results = await readBarcodes(file, READ_OPTS)
+      if (results.length) {
+        await handleCode(resultText(results[0]))
+      } else {
+        setCamError('No barcode found in that image.')
+      }
     } catch {
-      setCamError('No barcode found in that image.')
+      setCamError('Could not read that image.')
+    } finally {
       setBusy(false)
     }
   }
@@ -126,6 +158,7 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
                 }} />
               </div>
 
+              {busy && <p className="c-dim" style={{ fontSize: 12.5, marginTop: 10 }}>Reading…</p>}
               {camError && <p className="c-dim" style={{ fontSize: 12.5, marginTop: 10 }}>{camError}</p>}
 
               <div className="flex gap-2" style={{ marginTop: 12 }}>

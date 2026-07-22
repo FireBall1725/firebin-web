@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { readBarcodes, prepareZXingModule, type ReaderOptions } from 'zxing-wasm/reader'
 import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'
-import { api, type ScanResult, type StorageLocation, type EnrichedPart, type PriceBreak } from '../lib/api'
+import { api, type ScanResult, type StorageLocation, type EnrichedPart, type PriceBreak, type Category } from '../lib/api'
 import { num } from '../lib/format'
+import { PartForm, type PartDraft, type DraftSupplier } from './PartForm'
 
 // Only import supplier SKUs from these major distributors on enrichment — skip
 // the long tail of obscure brokers Octopart lists.
@@ -212,9 +213,8 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="modal-b">
-          {!result ? (
-            <>
+        {!result ? (
+          <div className="modal-b">
               <p className="c-dim" style={{ fontSize: 13, marginTop: 0 }}>
                 Point the camera at a distributor bag's Data&nbsp;Matrix, or upload a photo.
               </p>
@@ -257,15 +257,34 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
                   </button>
                 </div>
               </div>
-            </>
-          ) : (
-            <ScanResultView
-              result={result}
-              onClose={onClose}
-              onRescan={() => { setResult(null); setManual('') }}
-              navigate={navigate}
-            />
-          )}
+          </div>
+        ) : (
+          <ScanResultView
+            result={result}
+            onClose={onClose}
+            onRescan={() => { setResult(null); setManual('') }}
+            navigate={navigate}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// decodedCard renders the read-only "what the barcode said" summary shown above
+// both the match and create branches.
+function decodedCard(parsed: ScanResult['parsed'], style?: React.CSSProperties) {
+  return (
+    <div className="card" style={{ boxShadow: 'none', ...style }}>
+      <div style={{ padding: 14 }}>
+        <span className="eyebrow">Decoded</span>
+        <div className="mono" style={{ fontSize: 15, marginTop: 4 }}>{parsed.mpn || <span className="c-faint">no MPN</span>}</div>
+        <div className="flex flex-wrap gap-2" style={{ marginTop: 8 }}>
+          {parsed.quantity > 0 && <span className="pill ghost">qty {num(parsed.quantity)}</span>}
+          {parsed.distributor && <span className="pill ghost">{parsed.distributor}</span>}
+          {parsed.customer_part && <span className="tag">{parsed.customer_part}</span>}
+          {parsed.date_code && <span className="tag">DC {parsed.date_code}</span>}
+          {parsed.country_of_origin && <span className="tag">{parsed.country_of_origin}</span>}
         </div>
       </div>
     </div>
@@ -284,189 +303,165 @@ function ScanResultView({
   navigate: (to: string) => void
 }) {
   const { parsed, match } = result
-  const [qty, setQty] = useState(parsed.quantity > 0 ? String(parsed.quantity) : '')
-  const [name, setName] = useState('')
-  const [locationID, setLocationID] = useState('')
-  const [locations, setLocations] = useState<StorageLocation[]>([])
-  const [busy, setBusy] = useState(false)
+  const [categories, setCategories] = useState<Category[]>([])
   const [enriched, setEnriched] = useState<EnrichedPart | null>(null)
-  const [enriching, setEnriching] = useState(false)
+  const [enriching, setEnriching] = useState(!match && !!parsed.mpn)
 
   useEffect(() => {
-    api.listLocations().then(setLocations).catch(() => undefined)
+    api.listCategories().then(setCategories).catch(() => setCategories([]))
   }, [])
 
-  // On a no-match scan, look the MPN up (Nexar/Octopart) to auto-name and fill
-  // parameters. Silently no-ops if enrichment isn't configured or finds nothing.
+  // On a no-match scan, look the MPN up (Nexar/Octopart) to pre-fill the create
+  // form. Silently no-ops if enrichment isn't configured or finds nothing.
   useEffect(() => {
     if (match || !parsed.mpn) return
     setEnriching(true)
     api
       .enrich(parsed.mpn)
-      .then((r) => {
-        if (r.found && r.part) {
-          setEnriched(r.part)
-          setName(r.part.name)
-        }
-      })
+      .then((r) => setEnriched(r.found && r.part ? r.part : null))
       .catch(() => undefined)
       .finally(() => setEnriching(false))
   }, [match, parsed.mpn])
 
   const note = `scan${parsed.customer_part ? ' · ' + parsed.customer_part : ''}`
 
-  const addToExisting = async () => {
-    if (!match) return
+  // ── Match: one-tap add-to-stock ────────────────────────────────────────────
+  if (match) {
+    return (
+      <MatchView
+        match={match}
+        parsed={parsed}
+        note={note}
+        onRescan={onRescan}
+        onDone={(id) => { onClose(); navigate(`/parts/${id}`) }}
+      />
+    )
+  }
+
+  // ── No match: the same create form the manual "Add item" uses, pre-filled ───
+  if (enriching) {
+    return (
+      <div className="modal-b">
+        {decodedCard(parsed, { marginBottom: 14 })}
+        <p style={{ marginTop: 0, fontSize: 13 }} className="c-dim">Looking up part data…</p>
+      </div>
+    )
+  }
+
+  // Build the supplier SKUs to import: the distributor we scanned from
+  // (authoritative) plus the major distributors Octopart lists (with prices).
+  const suppliers: DraftSupplier[] = []
+  const seen = new Set<string>()
+  const push = (supplier: string, sku: string, pricing: PriceBreak[]) => {
+    const key = `${supplier.toLowerCase()}|${sku.toLowerCase()}`
+    if (!supplier || !sku || seen.has(key)) return
+    seen.add(key)
+    suppliers.push({ supplier, sku, pricing })
+  }
+  if (parsed.distributor && parsed.customer_part) push(parsed.distributor, parsed.customer_part, [])
+  for (const s of enriched?.suppliers ?? []) {
+    if (MAJOR_DISTRIBUTORS.test(s.name)) push(s.name, s.sku, s.prices)
+  }
+
+  const draft: PartDraft = {
+    name: enriched?.name ?? '',
+    package: enriched?.package || '',
+    description: enriched?.description || '',
+    parameters: enriched?.parameters?.map((p) => ({ name: p.name, value: p.value, units: p.units })) ?? [],
+    mpn: parsed.mpn || '',
+    manufacturer: enriched?.manufacturer || '',
+    datasheet_url: enriched?.datasheet_url || '',
+    quantity: parsed.quantity > 0 ? String(parsed.quantity) : '',
+    suppliers,
+  }
+
+  const header = (
+    <>
+      {decodedCard(parsed)}
+      {enriched ? (
+        <p className="c-dim" style={{ fontSize: 12.5, margin: 0 }}>
+          Auto-filled from Octopart. Review and adjust, then create.
+        </p>
+      ) : (
+        <p className="c-dim" style={{ fontSize: 12.5, margin: 0 }}>
+          No part with this MPN yet. Name it — the MPN becomes a manufacturer part under it.
+        </p>
+      )}
+    </>
+  )
+
+  return (
+    <PartForm
+      categories={categories}
+      initial={draft}
+      header={header}
+      note={note}
+      submitLabel="Create part & add stock"
+      onCancel={onRescan}
+      onCreated={(id) => { onClose(); navigate(`/parts/${id}`) }}
+    />
+  )
+}
+
+// MatchView: the scanned MPN already exists — just book stock into it.
+function MatchView({
+  match,
+  parsed,
+  note,
+  onRescan,
+  onDone,
+}: {
+  match: NonNullable<ScanResult['match']>
+  parsed: ScanResult['parsed']
+  note: string
+  onRescan: () => void
+  onDone: (partID: string) => void
+}) {
+  const [qty, setQty] = useState(parsed.quantity > 0 ? String(parsed.quantity) : '')
+  const [locationID, setLocationID] = useState('')
+  const [locations, setLocations] = useState<StorageLocation[]>([])
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.listLocations().then(setLocations).catch(() => undefined)
+  }, [])
+
+  const add = async () => {
     setBusy(true)
     try {
       const q = parseFloat(qty)
       if (!isNaN(q) && q > 0) {
         await api.adjustStock(match.part_id, { kind: 'add', quantity: q, location_id: locationID || null, note })
       }
-      onClose()
-      navigate(`/parts/${match.part_id}`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const createNew = async () => {
-    if (!name.trim()) return
-    setBusy(true)
-    try {
-      const part = await api.createPart({
-        name: name.trim(),
-        package: enriched?.package || null,
-        description: enriched?.description || null,
-        parameters: enriched?.parameters?.map((p) => ({ name: p.name, value: p.value })) ?? [],
-      })
-      if (parsed.mpn) {
-        const mp = await api.createManufacturerPart(part.id, {
-          manufacturer: enriched?.manufacturer || '',
-          mpn: parsed.mpn,
-          datasheet_url: enriched?.datasheet_url || null,
-        })
-        // Capture supplier SKUs: the distributor we scanned from (authoritative)
-        // plus the major distributors Octopart lists (with price breaks).
-        const seen = new Set<string>()
-        const addSupplier = async (supplier: string, sku: string, pricing: PriceBreak[]) => {
-          const key = `${supplier.toLowerCase()}|${sku.toLowerCase()}`
-          if (!sku || seen.has(key)) return
-          seen.add(key)
-          await api.createSupplierPart(mp.id, { supplier, sku, pricing }).catch(() => undefined)
-        }
-        if (parsed.distributor && parsed.customer_part) {
-          await addSupplier(parsed.distributor, parsed.customer_part, [])
-        }
-        if (enriched) {
-          for (const s of enriched.suppliers ?? []) {
-            if (MAJOR_DISTRIBUTORS.test(s.name)) await addSupplier(s.name, s.sku, s.prices)
-          }
-        }
-      }
-      const q = parseFloat(qty)
-      if (!isNaN(q) && q > 0) {
-        await api.adjustStock(part.id, { kind: 'add', quantity: q, location_id: locationID || null, note })
-      }
-      onClose()
-      navigate(`/parts/${part.id}`)
+      onDone(match.part_id)
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div>
-      <div className="card" style={{ boxShadow: 'none', marginBottom: 14 }}>
-        <div style={{ padding: 14 }}>
-          <span className="eyebrow">Decoded</span>
-          <div className="mono" style={{ fontSize: 15, marginTop: 4 }}>{parsed.mpn || <span className="c-faint">no MPN</span>}</div>
-          <div className="flex flex-wrap gap-2" style={{ marginTop: 8 }}>
-            {parsed.quantity > 0 && <span className="pill ghost">qty {num(parsed.quantity)}</span>}
-            {parsed.distributor && <span className="pill ghost">{parsed.distributor}</span>}
-            {parsed.customer_part && <span className="tag">{parsed.customer_part}</span>}
-            {parsed.date_code && <span className="tag">DC {parsed.date_code}</span>}
-            {parsed.country_of_origin && <span className="tag">{parsed.country_of_origin}</span>}
-          </div>
-        </div>
+    <div className="modal-b">
+      {decodedCard(parsed, { marginBottom: 14 })}
+      <p style={{ marginTop: 0, fontSize: 13.5 }}>
+        Matches <span style={{ fontWeight: 600 }}>{match.part_name}</span> in your inventory.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="fieldlabel"><span>Quantity</span>
+          <input type="number" className="input" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
+        </label>
+        <label className="fieldlabel"><span>Location</span>
+          <select className="input" value={locationID} onChange={(e) => setLocationID(e.target.value)}>
+            <option value="">No location</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </label>
       </div>
-
-      {match ? (
-        <div>
-          <p style={{ marginTop: 0, fontSize: 13.5 }}>
-            Matches <span style={{ fontWeight: 600 }}>{match.part_name}</span> in your inventory.
-          </p>
-          <QtyLoc qty={qty} setQty={setQty} locationID={locationID} setLocationID={setLocationID} locations={locations} />
-          <div className="flex gap-2" style={{ marginTop: 12 }}>
-            <button className="btn" onClick={onRescan}>Scan again</button>
-            <button className="btn primary" style={{ flex: 1, justifyContent: 'center' }} disabled={busy} onClick={addToExisting}>
-              Add {qty || '0'} to stock
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div>
-          {enriching && (
-            <p style={{ marginTop: 0, fontSize: 13 }} className="c-dim">Looking up part data…</p>
-          )}
-          {enriched ? (
-            <div className="card" style={{ boxShadow: 'none', marginTop: 0, marginBottom: 12 }}>
-              <div style={{ padding: 12 }}>
-                <span className="eyebrow">Auto-filled from Octopart</span>
-                <div className="flex flex-wrap gap-2" style={{ marginTop: 6 }}>
-                  {enriched.manufacturer && <span className="pill ghost">{enriched.manufacturer}</span>}
-                  {enriched.category && <span className="tag">{enriched.category}</span>}
-                  {enriched.package && <span className="tag">{enriched.package}</span>}
-                  {(enriched.parameters?.length ?? 0) > 0 && <span className="tag">{enriched.parameters.length} params</span>}
-                  {enriched.datasheet_url && (
-                    <a href={enriched.datasheet_url} target="_blank" rel="noreferrer" className="tag" style={{ color: 'var(--accent)' }}>datasheet ↗</a>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            !enriching && (
-              <p style={{ marginTop: 0, fontSize: 13.5 }} className="c-dim">
-                No part with this MPN yet. Name it — <span className="mono">{parsed.mpn}</span> becomes a manufacturer part under it.
-              </p>
-            )
-          )}
-          <label className="fieldlabel"><span>Part name</span>
-            <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="e.g. 4.7µF Capacitor 1206" />
-          </label>
-          <div style={{ marginTop: 10 }}>
-            <QtyLoc qty={qty} setQty={setQty} locationID={locationID} setLocationID={setLocationID} locations={locations} />
-          </div>
-          <div className="flex gap-2" style={{ marginTop: 12 }}>
-            <button className="btn" onClick={onRescan}>Scan again</button>
-            <button className="btn primary" style={{ flex: 1, justifyContent: 'center' }} disabled={busy || !name.trim()} onClick={createNew}>
-              Create part &amp; add stock
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function QtyLoc({
-  qty, setQty, locationID, setLocationID, locations,
-}: {
-  qty: string; setQty: (v: string) => void
-  locationID: string; setLocationID: (v: string) => void
-  locations: StorageLocation[]
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <label className="fieldlabel"><span>Quantity</span>
-        <input type="number" className="input" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
-      </label>
-      <label className="fieldlabel"><span>Location</span>
-        <select className="input" value={locationID} onChange={(e) => setLocationID(e.target.value)}>
-          <option value="">No location</option>
-          {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
-      </label>
+      <div className="flex gap-2" style={{ marginTop: 12 }}>
+        <button className="btn" onClick={onRescan}>Scan again</button>
+        <button className="btn primary" style={{ flex: 1, justifyContent: 'center' }} disabled={busy} onClick={add}>
+          Add {qty || '0'} to stock
+        </button>
+      </div>
     </div>
   )
 }

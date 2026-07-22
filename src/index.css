@@ -151,6 +151,34 @@ body {
 .scan-btn svg { width: 16px; height: 16px; }
 .scan-btn:hover { background: var(--accent-hi); }
 
+/* Split "Scan ▾" button: primary scan action + caret for the add menu. */
+.scan-split {
+  position: relative; display: inline-flex; flex: none; border-radius: 9px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 0 6px 16px -6px var(--accent);
+}
+.scan-split .scan-btn { border-radius: 9px 0 0 9px; box-shadow: none; }
+.scan-caret {
+  display: grid; place-items: center; width: 30px; flex: none; cursor: pointer;
+  background: var(--accent); color: var(--on-accent); border: none;
+  border-left: 1px solid rgba(0, 0, 0, 0.18); border-radius: 0 9px 9px 0;
+}
+.scan-caret:hover { background: var(--accent-hi); }
+.scan-caret svg { width: 15px; height: 15px; }
+
+.menu-scrim { position: fixed; inset: 0; z-index: 39; }
+.scan-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; min-width: 200px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 5px;
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.55);
+}
+.scan-menu button {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: 7px; background: transparent; border: none;
+  color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.scan-menu button:hover { background: var(--panel-2); }
+.scan-menu button svg { width: 15px; height: 15px; color: var(--dim); }
+
 .icon-btn {
   display: grid; place-items: center; width: 36px; height: 36px; flex: none; cursor: pointer;
   background: var(--panel); border: 1px solid var(--border); border-radius: 9px; color: var(--dim);

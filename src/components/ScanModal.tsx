@@ -12,9 +12,15 @@ import { num } from '../lib/format'
 // safe — no CDN). zxing-cpp reads Data Matrix reliably, unlike the JS port.
 prepareZXingModule({ overrides: { locateFile: () => wasmUrl } })
 
+// Distributor bags carry the EIGP data in a Data Matrix; the Code128 1-D codes
+// on the same label are the distributor's internal refs (not the MPN), so we
+// deliberately don't scan for them — otherwise the reader locks onto the wrong
+// barcode. QR is kept for the rare label that uses it.
 const READ_OPTS: ReaderOptions = {
-  formats: ['DataMatrix', 'Code128', 'QRCode'],
+  formats: ['DataMatrix', 'QRCode'],
   tryHarder: true,
+  tryRotate: true,
+  tryInvert: true,
   maxNumberOfSymbols: 1,
 }
 
@@ -49,7 +55,13 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
     ;(async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
+          // Request a high-res feed so a small, dense Data Matrix has enough
+          // pixels to decode.
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
           audio: false,
         })
         const v = videoRef.current
@@ -64,14 +76,23 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
           if (stopped || !videoRef.current) return
           const vid = videoRef.current
           if (vid.videoWidth > 0) {
-            canvas.width = vid.videoWidth
-            canvas.height = vid.videoHeight
+            // Decode only the centre reticle region (matches the on-screen box):
+            // it isolates the Data Matrix from other label barcodes and gives it
+            // more effective resolution than scanning the whole frame.
+            const iw = vid.videoWidth
+            const ih = vid.videoHeight
+            const cw = Math.round(iw * 0.6)
+            const ch = Math.round(ih * 0.64)
+            const sx = Math.round((iw - cw) / 2)
+            const sy = Math.round((ih - ch) / 2)
+            canvas.width = cw
+            canvas.height = ch
             const ctx = canvas.getContext('2d')
             if (ctx) {
-              ctx.drawImage(vid, 0, 0)
+              ctx.drawImage(vid, sx, sy, cw, ch, 0, 0, cw, ch)
               try {
                 const results = await readBarcodes(
-                  ctx.getImageData(0, 0, canvas.width, canvas.height),
+                  ctx.getImageData(0, 0, cw, ch),
                   READ_OPTS,
                 )
                 if (results.length && !stopped) {

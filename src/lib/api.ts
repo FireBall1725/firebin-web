@@ -112,6 +112,7 @@ export interface StorageLocation {
 export interface StockItem {
   id: string
   part_id: string
+  part_name?: string
   location_id?: string
   location_name?: string
   supplier_part_id?: string
@@ -125,9 +126,20 @@ export interface StockItem {
   updated_at: string
 }
 
+export interface Stats {
+  parts_count: number
+  variants_count: number
+  locations_count: number
+  low_stock_count: number
+  total_units: number
+  inventory_value: number
+}
+
 export interface StockTransaction {
   id: string
   stock_item_id: string
+  part_id?: string
+  part_name?: string
   kind: string
   delta: number
   resulting_quantity: number
@@ -220,7 +232,7 @@ async function request<T>(
   const access = tokenStore.access
   if (access) headers.set('Authorization', `Bearer ${access}`)
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers })
+  const res = await fetch(`${BASE}${path}`, { ...options, headers, cache: 'no-store' })
 
   if (res.status === 401 && retry && tokenStore.refresh) {
     if (await tryRefresh()) {
@@ -340,7 +352,97 @@ export const api = {
   createLocation(input: { name: string; parent_id?: string | null; barcode?: string | null; description?: string | null }) {
     return request<StorageLocation>('/locations', { method: 'POST', body: JSON.stringify(input) })
   },
+  updateLocation(id: string, input: { name: string; parent_id?: string | null; barcode?: string | null; description?: string | null }) {
+    return request<StorageLocation>(`/locations/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+  },
+  deleteLocation(id: string) {
+    return request<{ status: string }>(`/locations/${id}`, { method: 'DELETE' })
+  },
   scanLocation(barcode: string) {
     return request<StorageLocation>(`/locations/scan?barcode=${encodeURIComponent(barcode)}`)
   },
+  listLocationStock(id: string) {
+    return request<StockItem[]>(`/locations/${id}/stock`)
+  },
+
+  // ── Dashboard ───────────────────────────────────────────────────────────────
+  getStats() {
+    return request<Stats>('/stats')
+  },
+  listLowStock() {
+    return request<Part[]>('/parts/low-stock')
+  },
+  recentActivity() {
+    return request<StockTransaction[]>('/stock/recent')
+  },
+}
+
+// ── Real-time (SSE) ───────────────────────────────────────────────────────────
+// One persistent stream for the whole app, started on first subscribe and kept
+// open for the tab's lifetime (React StrictMode mount/unmount churn would kill a
+// ref-counted connection, so we deliberately never tear it down — subscribers
+// just add/remove from the listener set). Uses fetch-streaming rather than
+// EventSource so we can send the Bearer header. Auto-reconnects with backoff.
+// Change signals are coarse resource names ("parts"/"stock"/"locations"/"categories").
+type EventListener = (resource: string) => void
+const listeners = new Set<EventListener>()
+let streamStarted = false
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+async function runStream() {
+  for (;;) {
+    try {
+      const res = await fetch(`${BASE}/events`, {
+        headers: tokenStore.access ? { Authorization: `Bearer ${tokenStore.access}` } : {},
+      })
+      if (res.status === 401 && tokenStore.refresh) {
+        await tryRefresh()
+        continue
+      }
+      if (!res.ok || !res.body) {
+        await sleep(2000)
+        continue
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        let sep: number
+        while ((sep = buf.indexOf('\n\n')) >= 0) {
+          const frame = buf.slice(0, sep)
+          buf = buf.slice(sep + 2)
+          for (const line of frame.split('\n')) {
+            if (line.startsWith('data:')) {
+              try {
+                const ev = JSON.parse(line.slice(5).trim())
+                if (ev?.resource) listeners.forEach((l) => l(ev.resource))
+              } catch {
+                // ignore malformed frame
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // network error / stream closed — reconnect after a short backoff
+    }
+    await sleep(2000)
+  }
+}
+
+export function subscribeEvents(fn: EventListener): () => void {
+  listeners.add(fn)
+  if (!streamStarted) {
+    streamStarted = true
+    runStream()
+  }
+  return () => {
+    listeners.delete(fn)
+  }
 }

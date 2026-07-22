@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, type Part, type Category } from '../lib/api'
 import { NewPartModal } from '../components/NewPartModal'
 import { stockClass } from '../lib/format'
+import { useRealtime } from '../lib/useRealtime'
 
 export function PartsPage() {
   const navigate = useNavigate()
@@ -35,6 +36,12 @@ export function PartsPage() {
     const t = setTimeout(load, 200)
     return () => clearTimeout(t)
   }, [load])
+
+  // Live-refresh when anyone changes parts or stock elsewhere.
+  useRealtime(['parts', 'stock'], load)
+  useRealtime(['categories'], () => {
+    api.listCategories().then(setCategories).catch(() => undefined)
+  })
 
   const toggle = async (p: Part) => {
     if (expanded[p.id]) {

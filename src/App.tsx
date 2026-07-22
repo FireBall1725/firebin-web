@@ -9,7 +9,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { TokensPage } from './pages/TokensPage'
 import { PartsPage } from './pages/PartsPage'
 import { PartDetailPage } from './pages/PartDetailPage'
-import { PlaceholderPage } from './pages/PlaceholderPage'
+import { LocationsPage } from './pages/LocationsPage'
 
 export function App() {
   return (
@@ -20,15 +20,7 @@ export function App() {
           <Route index element={<DashboardPage />} />
           <Route path="parts" element={<PartsPage />} />
           <Route path="parts/:id" element={<PartDetailPage />} />
-          <Route
-            path="locations"
-            element={
-              <PlaceholderPage
-                title="Locations"
-                note="Storage location tree lands with the API domain CRUD (next piece)."
-              />
-            }
-          />
+          <Route path="locations" element={<LocationsPage />} />
           <Route path="tokens" element={<TokensPage />} />
         </Route>
       </Route>

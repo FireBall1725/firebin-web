@@ -14,6 +14,7 @@ import {
 } from '../lib/api'
 import { NewPartModal } from '../components/NewPartModal'
 import { stockClass, num } from '../lib/format'
+import { useRealtime } from '../lib/useRealtime'
 
 export function PartDetailPage() {
   const { id = '' } = useParams()
@@ -37,6 +38,8 @@ export function PartDetailPage() {
     api.listLocations().then(setLocations).catch(() => setLocations([]))
     api.listCategories().then(setCategories).catch(() => setCategories([]))
   }, [reload])
+
+  useRealtime(['parts', 'stock'], reload)
 
   if (notFound) {
     return (

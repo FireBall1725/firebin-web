@@ -29,6 +29,9 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
         secure: false,
+        // Keep long-lived SSE (/api/events) from being idle-closed by the proxy.
+        timeout: 0,
+        proxyTimeout: 0,
       },
     },
   },

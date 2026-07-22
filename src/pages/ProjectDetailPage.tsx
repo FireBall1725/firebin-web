@@ -72,11 +72,13 @@ export function ProjectDetailPage() {
   )
 }
 
-// AddBoard uploads a KiCad file (schematic or BOM CSV) as a new board.
+// AddBoard uploads a KiCad file (schematic or BOM CSV) as a new board, via
+// click-to-pick or drag-and-drop.
 function AddBoard({ projectID, onAdded }: { projectID: string; onAdded: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const upload = async (file: File) => {
@@ -94,31 +96,47 @@ function AddBoard({ projectID, onAdded }: { projectID: string; onAdded: () => vo
     }
   }
 
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    if (busy) return
+    const file = e.dataTransfer.files?.[0]
+    if (file) upload(file)
+  }
+
   return (
     <div className="card mt-5">
       <div className="card-h"><h2>Add a board</h2></div>
       <div className="p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="fieldlabel" style={{ flex: '1 1 220px' }}>
-            <span>Board name (optional)</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Main board — defaults to the filename" />
-          </label>
-          <label className="btn primary" style={{ cursor: busy ? 'default' : 'pointer' }}>
-            {busy ? 'Parsing…' : 'Upload KiCad file'}
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".kicad_sch,.csv,.tsv"
-              hidden
-              disabled={busy}
-              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-            />
-          </label>
-        </div>
-        <p className="c-faint" style={{ fontSize: 12, marginTop: 8 }}>
-          Upload a <span className="mono">.kicad_sch</span> schematic (or a KiCad BOM <span className="mono">.csv</span>). We parse the components, group them into a BOM, and match each line to your inventory.
-        </p>
-        {error && <p className="c-crit text-sm" style={{ marginTop: 6 }}>{error}</p>}
+        <label className="fieldlabel" style={{ marginBottom: 12 }}>
+          <span>Board name (optional)</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Main board — defaults to the filename" />
+        </label>
+
+        <label
+          className={`dropzone ${dragging ? 'over' : ''} ${busy ? 'busy' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="26" height="26">
+            <path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+          </svg>
+          <div className="dz-title">{busy ? 'Parsing…' : dragging ? 'Drop to upload' : 'Drag a KiCad file here, or click to browse'}</div>
+          <div className="dz-sub">
+            <span className="mono">.kicad_sch</span> schematic or a KiCad BOM <span className="mono">.csv</span> — we parse it, group the BOM, and match each line to inventory.
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".kicad_sch,.csv,.tsv"
+            hidden
+            disabled={busy}
+            onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+          />
+        </label>
+
+        {error && <p className="c-crit text-sm" style={{ marginTop: 8 }}>{error}</p>}
       </div>
     </div>
   )

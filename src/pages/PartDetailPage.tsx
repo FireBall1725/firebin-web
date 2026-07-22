@@ -14,7 +14,7 @@ import {
 } from '../lib/api'
 import { NewPartModal } from '../components/NewPartModal'
 import { ManufacturerParts } from '../components/ManufacturerParts'
-import { stockClass, num } from '../lib/format'
+import { num } from '../lib/format'
 import { useRealtime } from '../lib/useRealtime'
 
 export function PartDetailPage() {
@@ -45,16 +45,15 @@ export function PartDetailPage() {
   if (notFound) {
     return (
       <div>
-        <Link to="/parts" className="text-sm text-amber-600 hover:underline dark:text-amber-400">
-          ← Parts
-        </Link>
-        <p className="mt-8 text-zinc-500">Part not found.</p>
+        <Link to="/parts" className="link">← Parts</Link>
+        <p className="mt-8 c-dim">Part not found.</p>
       </div>
     )
   }
-  if (!part) return <p className="text-zinc-400">Loading…</p>
+  if (!part) return <p className="c-faint">Loading…</p>
 
   const isTemplate = part.is_template || (part.variant_count ?? 0) > 0
+  const low = part.total_stock <= 0 || (part.minimum_stock > 0 && part.total_stock <= part.minimum_stock)
 
   const del = async () => {
     if (!confirm(`Delete "${part.name}"? This removes its variants and stock.`)) return
@@ -64,50 +63,55 @@ export function PartDetailPage() {
 
   return (
     <div>
-      <Link to="/parts" className="text-sm text-amber-600 hover:underline dark:text-amber-400">
-        ← Parts
+      <Link to="/parts" className="btn sm" style={{ marginBottom: 14 }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
+        Parts
       </Link>
 
-      <div className="mt-3 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{part.name}</h1>
-          <div className="mt-1 flex items-center gap-2 text-sm text-zinc-500">
-            {part.package && (
-              <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono text-xs dark:bg-zinc-800">
-                {part.package}
-              </span>
-            )}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <span className="eyebrow">
+            {part.variant_of ? 'Variant' : isTemplate ? 'Template' : 'Part'}
+          </span>
+          <h1 className="c-text" style={{ fontSize: 24, fontWeight: 650, letterSpacing: '-0.02em', margin: '4px 0 6px' }}>
+            {part.name}
+          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            {part.package && <span className="tag">{part.package}</span>}
             {isTemplate && (
-              <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                template · {part.variant_count ?? part.variants?.length ?? 0} variants
+              <span className="pill accent">
+                {part.variant_count ?? part.variants?.length ?? 0} variants
               </span>
             )}
-            {part.variant_of && <span className="text-xs">variant</span>}
+            {!isTemplate && (
+              <span className={`pill ${low ? 'low' : 'ok'}`}>
+                {num(part.total_stock)} {low ? 'low' : 'in stock'}
+              </span>
+            )}
+            {part.barcode && <span className="tag">{part.barcode}</span>}
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-xs text-zinc-400">In stock</div>
-            <div className={`font-mono text-2xl ${stockClass(part.total_stock, part.minimum_stock)}`}>
+          <div style={{ textAlign: 'right' }}>
+            <div className="eyebrow">In stock</div>
+            <div className={`mono ${low ? 'c-crit' : 'c-text'}`} style={{ fontSize: 24, fontWeight: 700 }}>
               {num(part.total_stock)}
             </div>
           </div>
-          <button onClick={del} className="self-start text-sm text-zinc-400 hover:text-red-500">
-            Delete
-          </button>
+          <button onClick={del} className="btn sm danger">Delete</button>
         </div>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
         {/* Parameters */}
         <Section title="Parameters">
           {part.parameters && part.parameters.length > 0 ? (
-            <table className="w-full text-sm">
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+            <table className="tbl">
+              <tbody>
                 {part.parameters.map((p) => (
                   <tr key={p.id}>
-                    <td className="py-1.5 text-zinc-500">{p.template_name}</td>
-                    <td className="py-1.5 text-right font-mono">
+                    <td className="c-dim">{p.template_name}</td>
+                    <td className="num c-text">
                       {p.value}
                       {p.units ? ` ${p.units}` : ''}
                     </td>
@@ -125,31 +129,26 @@ export function PartDetailPage() {
           <Section
             title="Variants"
             action={
-              <button onClick={() => setAddVariant(true)} className="text-xs text-amber-600 hover:underline dark:text-amber-400">
+              <button onClick={() => setAddVariant(true)} className="link" style={{ fontSize: 12 }}>
                 + add variant
               </button>
             }
           >
             {part.variants && part.variants.length > 0 ? (
-              <ul className="divide-y divide-zinc-100 text-sm dark:divide-zinc-800/60">
+              <div>
                 {part.variants.map((v) => (
-                  <li key={v.id}>
-                    <Link
-                      to={`/parts/${v.id}`}
-                      className="flex items-center justify-between py-2 hover:text-amber-600 dark:hover:text-amber-400"
-                    >
-                      <span>{v.name}</span>
-                      <span className="font-mono text-xs text-zinc-500">{v.package || ''}</span>
-                    </Link>
-                  </li>
+                  <Link key={v.id} to={`/parts/${v.id}`} className="flex items-center justify-between px-4 py-2.5 bd-b hoverable-link">
+                    <span className="c-text">{v.name}</span>
+                    <span className="mono c-faint" style={{ fontSize: 12 }}>{v.package || ''}</span>
+                  </Link>
                 ))}
-              </ul>
+              </div>
             ) : (
               <Empty>No variants yet.</Empty>
             )}
           </Section>
         ) : (
-          <Section title="Adjust stock">
+          <Section title="Adjust stock" pad>
             <AdjustStock partID={part.id} locations={locations} onDone={reload} />
           </Section>
         )}
@@ -157,62 +156,60 @@ export function PartDetailPage() {
 
       {/* Stock by bin */}
       {!isTemplate && (
-        <Section title="Stock by location" className="mt-8">
+        <Section title="Stock by location" className="mt-4" flush>
           {stock.length > 0 ? (
-            <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">Location</th>
-                    <th className="px-4 py-2 font-medium">Batch</th>
-                    <th className="px-4 py-2 text-right font-medium">Quantity</th>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Location</th>
+                  <th>Batch</th>
+                  <th className="num">Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stock.map((s) => (
+                  <tr key={s.id}>
+                    <td className="c-text">{s.location_name || <span className="c-faint">unassigned</span>}</td>
+                    <td className="mono c-faint">{s.batch || '—'}</td>
+                    <td className="num c-text">{num(s.quantity)}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                  {stock.map((s) => (
-                    <tr key={s.id}>
-                      <td className="px-4 py-2">{s.location_name || <span className="text-zinc-400">unassigned</span>}</td>
-                      <td className="px-4 py-2 font-mono text-xs text-zinc-500">{s.batch || '—'}</td>
-                      <td className="px-4 py-2 text-right font-mono">{num(s.quantity)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           ) : (
-            <Empty>No stock recorded. Use “Adjust stock” to add some.</Empty>
+            <div className="p-4"><Empty>No stock recorded. Use “Adjust stock” to add some.</Empty></div>
           )}
         </Section>
       )}
 
       {/* Commercial tree: MPNs → supplier SKUs → price breaks */}
-      <div className="mt-8">
+      <div className="mt-4">
         <ManufacturerParts partID={part.id} items={part.manufacturer_parts ?? []} onChanged={reload} />
       </div>
 
       {/* History */}
-      <Section title="Stock history" className="mt-8">
+      <Section title="Stock history" className="mt-4">
         {history.length > 0 ? (
-          <ul className="divide-y divide-zinc-100 text-sm dark:divide-zinc-800/60">
+          <div>
             {history.map((t) => (
-              <li key={t.id} className="flex items-center justify-between py-2">
-                <span className="text-zinc-500">
-                  <span className="font-mono text-xs uppercase">{t.kind}</span>
+              <div key={t.id} className="flex items-center justify-between px-4 py-2.5 bd-b">
+                <span className="c-dim text-sm">
+                  <span className="mono" style={{ fontSize: 11, textTransform: 'uppercase' }}>{t.kind}</span>
                   {t.note ? ` · ${t.note}` : ''}
                 </span>
-                <span className="flex items-center gap-4 font-mono text-xs">
-                  <span className={t.delta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                <span className="flex items-center gap-4 mono" style={{ fontSize: 12 }}>
+                  <span className={t.delta >= 0 ? 'c-good' : 'c-crit'}>
                     {t.delta >= 0 ? '+' : ''}
                     {num(t.delta)}
                   </span>
-                  <span className="text-zinc-400">→ {num(t.resulting_quantity)}</span>
-                  <span className="text-zinc-400">{new Date(t.created_at).toLocaleDateString()}</span>
+                  <span className="c-faint">→ {num(t.resulting_quantity)}</span>
+                  <span className="c-faint">{new Date(t.created_at).toLocaleDateString()}</span>
                 </span>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         ) : (
-          <Empty>No movements yet.</Empty>
+          <div className="p-4"><Empty>No movements yet.</Empty></div>
         )}
       </Section>
 
@@ -267,15 +264,9 @@ function AdjustStock({
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-1 rounded-md bg-zinc-100 p-1 text-sm dark:bg-zinc-800">
+      <div className="seg">
         {(['add', 'remove', 'count'] as AdjustKind[]).map((k) => (
-          <button
-            key={k}
-            onClick={() => setKind(k)}
-            className={`flex-1 rounded px-3 py-1 capitalize ${
-              kind === k ? 'bg-white font-medium shadow-sm dark:bg-zinc-700' : 'text-zinc-500'
-            }`}
-          >
+          <button key={k} onClick={() => setKind(k)} className={`seg-btn ${kind === k ? 'on' : ''}`}>
             {k}
           </button>
         ))}
@@ -286,9 +277,9 @@ function AdjustStock({
           value={qty}
           onChange={(e) => setQty(e.target.value)}
           placeholder={kind === 'count' ? 'Counted quantity' : 'Quantity'}
-          className={inputCls}
+          className="input"
         />
-        <select value={locationID} onChange={(e) => setLocationID(e.target.value)} className={inputCls}>
+        <select value={locationID} onChange={(e) => setLocationID(e.target.value)} className="input">
           <option value="">No location</option>
           {locations.map((l) => (
             <option key={l.id} value={l.id}>
@@ -297,45 +288,42 @@ function AdjustStock({
           ))}
         </select>
       </div>
-      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className={inputCls} />
-      <button
-        onClick={apply}
-        disabled={busy || !qty}
-        className="w-full rounded-md bg-amber-500 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
-      >
+      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="input" />
+      <button onClick={apply} disabled={busy || !qty} className="btn primary" style={{ width: '100%', justifyContent: 'center' }}>
         {busy ? '…' : `Apply ${kind}`}
       </button>
     </div>
   )
 }
 
-const inputCls =
-  'w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500 dark:border-zinc-700 dark:bg-zinc-800'
-
 function Section({
   title,
   action,
   className = '',
+  pad,
+  flush,
   children,
 }: {
   title: string
   action?: React.ReactNode
   className?: string
+  pad?: boolean
+  flush?: boolean
   children: React.ReactNode
 }) {
   return (
     <section className={className}>
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">{title}</h2>
-        {action}
-      </div>
-      <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        {children}
+      <div className="card">
+        <div className="card-h">
+          <h2>{title}</h2>
+          {action && <div style={{ marginLeft: 'auto' }}>{action}</div>}
+        </div>
+        <div className={pad ? 'p-4' : flush ? '' : ''}>{children}</div>
       </div>
     </section>
   )
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-zinc-400">{children}</p>
+  return <p className="c-faint text-sm">{children}</p>
 }

@@ -32,30 +32,24 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
-      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-6 text-center">
-          <img src="/firelabs-mark.png" alt="" className="mx-auto mb-2 h-14 w-14" />
-          <div className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-            FireBin
+    <div className="bg-app flex min-h-screen items-center justify-center px-4">
+      <div className="card w-full" style={{ maxWidth: 380, padding: 32 }}>
+        <div className="text-center" style={{ marginBottom: 22 }}>
+          <img src="/firelabs-mark.png" alt="FireLabs" className="mx-auto" style={{ height: 52, width: 52, filter: 'drop-shadow(0 2px 6px rgba(245,165,36,0.3))' }} />
+          <div className="brand-name" style={{ fontSize: 22, marginTop: 10 }}>
+            Fire<b>Bin</b>
           </div>
-          <p className="mt-1 text-sm text-zinc-500">Electronics component inventory</p>
+          <p className="eyebrow" style={{ marginTop: 4 }}>Electronics component inventory</p>
         </div>
 
         <form onSubmit={submit} className="space-y-4">
           <Field label="Username" value={username} onChange={setUsername} autoFocus />
-          {mode === 'register' && (
-            <Field label="Email (optional)" type="email" value={email} onChange={setEmail} />
-          )}
+          {mode === 'register' && <Field label="Email (optional)" type="email" value={email} onChange={setEmail} />}
           <Field label="Password" type="password" value={password} onChange={setPassword} />
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p className="c-crit text-sm">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-md bg-amber-500 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
-          >
+          <button type="submit" disabled={busy} className="btn primary" style={{ width: '100%', justifyContent: 'center' }}>
             {busy ? '…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
@@ -65,11 +59,10 @@ export function LoginPage() {
             setMode(mode === 'login' ? 'register' : 'login')
             setError(null)
           }}
-          className="mt-4 w-full text-center text-sm text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400"
+          className="c-dim hover-accent"
+          style={{ marginTop: 16, width: '100%', textAlign: 'center', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}
         >
-          {mode === 'login'
-            ? 'No account? Register'
-            : 'Already have an account? Sign in'}
+          {mode === 'login' ? 'No account? Register' : 'Already have an account? Sign in'}
         </button>
       </div>
     </div>
@@ -90,16 +83,14 @@ function Field({
   autoFocus?: boolean
 }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        {label}
-      </span>
+    <label className="fieldlabel">
+      <span>{label}</span>
       <input
         type={type}
         value={value}
         autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-800"
+        className="input"
       />
     </label>
   )

@@ -39,6 +39,107 @@ export interface CreatedPAT {
   meta: APIToken
 }
 
+export interface Category {
+  id: string
+  parent_id?: string
+  name: string
+  description?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PartParameter {
+  id: string
+  template_id: string
+  template_name: string
+  units?: string
+  value: string
+}
+
+export interface Part {
+  id: string
+  category_id?: string
+  variant_of?: string
+  name: string
+  description?: string
+  package?: string
+  keywords?: string
+  barcode?: string
+  image_path?: string
+  is_template: boolean
+  is_component: boolean
+  is_assembly: boolean
+  is_purchaseable: boolean
+  is_trackable: boolean
+  minimum_stock: number
+  default_location_id?: string
+  created_at: string
+  updated_at: string
+  total_stock: number
+  variant_count?: number
+  parameters?: PartParameter[]
+  variants?: Part[]
+}
+
+export interface ParameterInput {
+  name: string
+  units?: string
+  value: string
+}
+
+export interface PartInput {
+  name: string
+  category_id?: string | null
+  variant_of?: string | null
+  description?: string | null
+  package?: string | null
+  keywords?: string | null
+  is_template?: boolean
+  minimum_stock?: number
+  parameters?: ParameterInput[]
+}
+
+export interface StorageLocation {
+  id: string
+  parent_id?: string
+  name: string
+  description?: string
+  barcode?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface StockItem {
+  id: string
+  part_id: string
+  location_id?: string
+  location_name?: string
+  supplier_part_id?: string
+  quantity: number
+  batch?: string
+  serial?: string
+  purchase_price?: number
+  status: string
+  note?: string
+  added_at: string
+  updated_at: string
+}
+
+export interface StockTransaction {
+  id: string
+  stock_item_id: string
+  kind: string
+  delta: number
+  resulting_quantity: number
+  from_location_id?: string
+  to_location_id?: string
+  note?: string
+  user_id?: string
+  created_at: string
+}
+
+export type AdjustKind = 'add' | 'remove' | 'count' | 'adjust'
+
 const BASE = '/api/v1'
 const ACCESS_KEY = 'firebin.access'
 const REFRESH_KEY = 'firebin.refresh'
@@ -178,5 +279,68 @@ export const api = {
   },
   revokeToken(id: string) {
     return request<{ status: string }>(`/tokens/${id}`, { method: 'DELETE' })
+  },
+
+  // ── Categories ──────────────────────────────────────────────────────────────
+  listCategories() {
+    return request<Category[]>('/categories')
+  },
+  createCategory(name: string, parentID?: string) {
+    return request<Category>('/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name, parent_id: parentID ?? null }),
+    })
+  },
+
+  // ── Parts ───────────────────────────────────────────────────────────────────
+  listParts(opts: { search?: string; category?: string; topLevel?: boolean } = {}) {
+    const q = new URLSearchParams()
+    if (opts.search) q.set('search', opts.search)
+    if (opts.category) q.set('category', opts.category)
+    q.set('top_level', String(opts.topLevel ?? true))
+    return request<Part[]>(`/parts?${q.toString()}`)
+  },
+  getPart(id: string) {
+    return request<Part>(`/parts/${id}`)
+  },
+  createPart(input: PartInput) {
+    return request<Part>('/parts', { method: 'POST', body: JSON.stringify(input) })
+  },
+  updatePart(id: string, input: PartInput) {
+    return request<Part>(`/parts/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+  },
+  deletePart(id: string) {
+    return request<{ status: string }>(`/parts/${id}`, { method: 'DELETE' })
+  },
+
+  // ── Stock ───────────────────────────────────────────────────────────────────
+  listPartStock(partID: string) {
+    return request<StockItem[]>(`/parts/${partID}/stock`)
+  },
+  listPartHistory(partID: string) {
+    return request<StockTransaction[]>(`/parts/${partID}/stock/history`)
+  },
+  adjustStock(
+    partID: string,
+    body: { kind: AdjustKind; quantity: number; location_id?: string | null; note?: string | null },
+  ) {
+    return request<StockItem>(`/parts/${partID}/stock/adjust`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  moveStock(body: { stock_item_id: string; to_location_id?: string | null; quantity: number; note?: string | null }) {
+    return request<{ status: string }>('/stock/move', { method: 'POST', body: JSON.stringify(body) })
+  },
+
+  // ── Locations ───────────────────────────────────────────────────────────────
+  listLocations() {
+    return request<StorageLocation[]>('/locations')
+  },
+  createLocation(input: { name: string; parent_id?: string | null; barcode?: string | null; description?: string | null }) {
+    return request<StorageLocation>('/locations', { method: 'POST', body: JSON.stringify(input) })
+  },
+  scanLocation(barcode: string) {
+    return request<StorageLocation>(`/locations/scan?barcode=${encodeURIComponent(barcode)}`)
   },
 }

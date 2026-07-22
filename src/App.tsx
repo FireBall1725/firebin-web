@@ -7,6 +7,8 @@ import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { TokensPage } from './pages/TokensPage'
+import { PartsPage } from './pages/PartsPage'
+import { PartDetailPage } from './pages/PartDetailPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 
 export function App() {
@@ -16,15 +18,8 @@ export function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route index element={<DashboardPage />} />
-          <Route
-            path="parts"
-            element={
-              <PlaceholderPage
-                title="Parts"
-                note="Part browsing lands with the API domain CRUD (next piece)."
-              />
-            }
-          />
+          <Route path="parts" element={<PartsPage />} />
+          <Route path="parts/:id" element={<PartDetailPage />} />
           <Route
             path="locations"
             element={

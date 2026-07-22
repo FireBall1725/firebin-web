@@ -338,7 +338,7 @@ function ScanResultView({
         name: name.trim(),
         package: enriched?.package || null,
         description: enriched?.description || null,
-        parameters: enriched?.parameters.map((p) => ({ name: p.name, value: p.value })) ?? [],
+        parameters: enriched?.parameters?.map((p) => ({ name: p.name, value: p.value })) ?? [],
       })
       if (parsed.mpn) {
         const mp = await api.createManufacturerPart(part.id, {
@@ -359,7 +359,7 @@ function ScanResultView({
           await addSupplier(parsed.distributor, parsed.customer_part, [])
         }
         if (enriched) {
-          for (const s of enriched.suppliers) {
+          for (const s of enriched.suppliers ?? []) {
             if (MAJOR_DISTRIBUTORS.test(s.name)) await addSupplier(s.name, s.sku, s.prices)
           }
         }
@@ -417,7 +417,7 @@ function ScanResultView({
                   {enriched.manufacturer && <span className="pill ghost">{enriched.manufacturer}</span>}
                   {enriched.category && <span className="tag">{enriched.category}</span>}
                   {enriched.package && <span className="tag">{enriched.package}</span>}
-                  {enriched.parameters.length > 0 && <span className="tag">{enriched.parameters.length} params</span>}
+                  {(enriched.parameters?.length ?? 0) > 0 && <span className="tag">{enriched.parameters.length} params</span>}
                   {enriched.datasheet_url && (
                     <a href={enriched.datasheet_url} target="_blank" rel="noreferrer" className="tag" style={{ color: 'var(--accent)' }}>datasheet ↗</a>
                   )}

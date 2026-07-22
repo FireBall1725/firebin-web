@@ -124,12 +124,12 @@ function AddBoard({ projectID, onAdded }: { projectID: string; onAdded: () => vo
           </svg>
           <div className="dz-title">{busy ? 'Parsing…' : dragging ? 'Drop to upload' : 'Drag a KiCad file here, or click to browse'}</div>
           <div className="dz-sub">
-            <span className="mono">.kicad_sch</span> schematic or a KiCad BOM <span className="mono">.csv</span> — we parse it, group the BOM, and match each line to inventory.
+            A zipped KiCad project <span className="mono">.zip</span> (best — merges all sheets), a single <span className="mono">.kicad_sch</span>, or a KiCad BOM <span className="mono">.csv</span>. We parse it, group the BOM, and match each line to inventory.
           </div>
           <input
             ref={inputRef}
             type="file"
-            accept=".kicad_sch,.csv,.tsv"
+            accept=".zip,.kicad_sch,.csv,.tsv"
             hidden
             disabled={busy}
             onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}

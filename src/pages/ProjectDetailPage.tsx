@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, type Project, type Board, type ProjectAsset, type BoardPreview } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
-import { IBomViewer } from '../components/IBomViewer'
 import { BoardThumb } from '../components/BoardThumb'
 
 export function ProjectDetailPage() {
@@ -16,8 +15,6 @@ export function ProjectDetailPage() {
   const [notFound, setNotFound] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [showNewBoard, setShowNewBoard] = useState(false)
-  const [viewingImage, setViewingImage] = useState<ProjectAsset | null>(null)
-  const [viewingIbom, setViewingIbom] = useState<ProjectAsset | null>(null)
 
   const reload = useCallback(() => {
     api.getProject(id).then(setProject).catch(() => setNotFound(true))
@@ -47,8 +44,6 @@ export function ProjectDetailPage() {
   const renderFor = (board: Board) =>
     assets.find((a) => a.kind === 'ibom' && a.board_id === board.id) ??
     assets.find((a) => a.kind === 'pcbrender' && a.board_id === board.id)
-  const ibomAssets = assets.filter((a) => a.kind === 'ibom')
-  const imageAssets = assets.filter((a) => a.kind === 'image')
 
   return (
     <div>
@@ -105,25 +100,6 @@ export function ProjectDetailPage() {
         )}
       </div>
 
-      {/* Files: iBOMs + renders */}
-      {(ibomAssets.length > 0 || imageAssets.length > 0) && (
-        <div className="mt-6">
-          <div className="tiles-h"><span className="eyebrow">Files</span></div>
-          <div className="tiles">
-            {ibomAssets.map((a) => (
-              <button key={a.id} className="tile" onClick={() => setViewingIbom(a)}>
-                <div className="tile-art"><BoardThumb assetId={a.id} kind={a.kind} /></div>
-                <div className="tile-name truncate">Interactive BOM</div>
-                <div className="tile-sub"><span className="c-faint mono" style={{ fontSize: 10.5 }}>{a.name}</span></div>
-              </button>
-            ))}
-            {imageAssets.map((a) => (
-              <ImageTile key={a.id} asset={a} onOpen={() => setViewingImage(a)} />
-            ))}
-          </div>
-        </div>
-      )}
-
       {showUpload && (
         <UploadModal projectID={project.id} onClose={() => setShowUpload(false)} onDone={reload} />
       )}
@@ -134,8 +110,6 @@ export function ProjectDetailPage() {
           onCreated={(id) => navigate(`/projects/${project.id}/boards/${id}`)}
         />
       )}
-      {viewingIbom && <IBomViewer asset={viewingIbom} onClose={() => setViewingIbom(null)} showPlaced={false} />}
-      {viewingImage && <ImageViewer asset={viewingImage} onClose={() => setViewingImage(null)} />}
     </div>
   )
 }
@@ -353,53 +327,3 @@ function NewBoardModal({ projectID, onClose, onCreated }: { projectID: string; o
   )
 }
 
-function ImageTile({ asset, onOpen }: { asset: ProjectAsset; onOpen: () => void }) {
-  const [url, setUrl] = useState<string | null>(null)
-  useEffect(() => {
-    let revoked = false
-    let objectURL = ''
-    api.assetBlob(asset.id).then((blob) => {
-      if (revoked) return
-      objectURL = URL.createObjectURL(blob)
-      setUrl(objectURL)
-    }).catch(() => undefined)
-    return () => { revoked = true; if (objectURL) URL.revokeObjectURL(objectURL) }
-  }, [asset.id])
-
-  return (
-    <button className="tile" onClick={onOpen} title={asset.name}>
-      <div className="tile-art">{url ? <img src={url} alt={asset.name} /> : <span className="c-faint" style={{ fontSize: 11 }}>…</span>}</div>
-      <div className="tile-name truncate">{asset.name}</div>
-    </button>
-  )
-}
-
-function ImageViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => void }) {
-  const [url, setUrl] = useState<string | null>(null)
-  useEffect(() => {
-    let revoked = false
-    let objectURL = ''
-    api.assetBlob(asset.id).then((blob) => {
-      if (revoked) return
-      objectURL = URL.createObjectURL(blob)
-      setUrl(objectURL)
-    }).catch(() => undefined)
-    return () => { revoked = true; if (objectURL) URL.revokeObjectURL(objectURL) }
-  }, [asset.id])
-
-  return (
-    <div className="overlay" onClick={onClose}>
-      <div className="viewer" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-h">
-          <h3 className="truncate">{asset.name}</h3>
-          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="viewer-body">
-          {!url ? <p className="c-faint" style={{ padding: 24 }}>Loading…</p> : <img src={url} alt={asset.name} />}
-        </div>
-      </div>
-    </div>
-  )
-}

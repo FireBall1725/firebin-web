@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, type Board, type Project, type ProjectAsset } from '../lib/api'
+import { api, type Board, type BOMLine, type Project, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { num } from '../lib/format'
 import { IBomViewer } from '../components/IBomViewer'
@@ -78,13 +78,20 @@ export function BoardDetailPage() {
       </div>
 
       {tab === 'info' && <InfoTab board={board} ibom={ibom} matched={matched} totalParts={totalParts} />}
-      {tab === 'bom' && <BomTab board={board} copies={copies} />}
+      {tab === 'bom' && <BomTab board={board} copies={copies} onChanged={reload} />}
       {tab === 'layout' && (
         <div>
           {ibom ? (
             <IBomViewer asset={ibom} inline showPlaced={false} />
           ) : (
-            <div className="card"><p className="c-faint p-6 text-sm">No interactive BOM for this board. Upload a project zip that includes an iBOM to see the board layout.</p></div>
+            <div className="card">
+              <p className="c-dim p-6 text-sm" style={{ lineHeight: 1.6 }}>
+                No interactive BOM for this board. Upload a KiCad project zip that includes one to see the board layout.
+                Generate it with the{' '}
+                <a href="https://github.com/openscopeproject/InteractiveHtmlBom" target="_blank" rel="noreferrer" className="link">Interactive HTML BOM</a>{' '}
+                KiCad plugin (its <span className="mono">bom/ibom.html</span> gets picked up automatically).
+              </p>
+            </div>
           )}
         </div>
       )}
@@ -127,10 +134,25 @@ function Row({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
   )
 }
 
-function BomTab({ board, copies }: { board: Board; copies: number }) {
+function BomTab({ board, copies, onChanged }: { board: Board; copies: number; onChanged: () => void }) {
   const lines = board.lines ?? []
+  const [editing, setEditing] = useState<BOMLine | 'new' | null>(null)
+
+  const del = async (id: string) => {
+    if (!confirm('Remove this BOM line?')) return
+    await api.deleteBOMLine(id).catch(() => undefined)
+    onChanged()
+  }
+
   return (
     <section className="card" style={{ overflow: 'hidden' }}>
+      <div className="card-h">
+        <h2>Bill of materials</h2>
+        <button className="btn sm primary" style={{ marginLeft: 'auto' }} onClick={() => setEditing('new')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+          Add part
+        </button>
+      </div>
       <table className="tbl">
         <thead>
           <tr>
@@ -140,11 +162,12 @@ function BomTab({ board, copies }: { board: Board; copies: number }) {
             <th>Footprint</th>
             <th>MPN</th>
             <th>Inventory</th>
+            <th style={{ width: 70 }}></th>
           </tr>
         </thead>
         <tbody>
           {lines.length === 0 && (
-            <tr><td colSpan={6} className="c-faint" style={{ textAlign: 'center', padding: 20 }}>No BOM lines parsed.</td></tr>
+            <tr><td colSpan={7} className="c-faint" style={{ textAlign: 'center', padding: 20 }}>No parts yet. Add one, or upload a KiCad file.</td></tr>
           )}
           {lines.map((l) => (
             <tr key={l.id}>
@@ -152,7 +175,7 @@ function BomTab({ board, copies }: { board: Board; copies: number }) {
                 {l.quantity * copies}
                 {copies > 1 && <span className="c-faint" style={{ fontSize: 10 }}> ({l.quantity}×{copies})</span>}
               </td>
-              <td className="mono c-dim" style={{ fontSize: 12 }}>{l.refs}</td>
+              <td className="mono c-dim" style={{ fontSize: 12 }}>{l.refs || '—'}</td>
               <td className="c-text">{l.value || <span className="c-faint">—</span>}</td>
               <td className="mono c-faint" style={{ fontSize: 11.5 }}>{shortFootprint(l.footprint)}</td>
               <td className="mono c-faint" style={{ fontSize: 11.5 }}>{l.mpn || '—'}</td>
@@ -163,11 +186,108 @@ function BomTab({ board, copies }: { board: Board; copies: number }) {
                   <span className="pill low" style={{ whiteSpace: 'nowrap' }}>no match</span>
                 )}
               </td>
+              <td>
+                <div className="flex items-center gap-1 justify-end">
+                  <button className="icon-btn sm" title="Edit" onClick={() => setEditing(l)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+                  </button>
+                  <button className="icon-btn sm" title="Delete" onClick={() => del(l.id)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+                  </button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {editing && (
+        <LineModal
+          boardID={board.id}
+          line={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); onChanged() }}
+        />
+      )}
     </section>
+  )
+}
+
+function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line: BOMLine | null; onClose: () => void; onSaved: () => void }) {
+  const [refs, setRefs] = useState(line?.refs ?? '')
+  const [quantity, setQuantity] = useState(String(line?.quantity ?? 1))
+  const [value, setValue] = useState(line?.value ?? '')
+  const [footprint, setFootprint] = useState(line?.footprint ?? '')
+  const [mpn, setMpn] = useState(line?.mpn ?? '')
+  const [manufacturer, setManufacturer] = useState(line?.manufacturer ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = async () => {
+    setBusy(true)
+    setError(null)
+    const body = {
+      refs: refs.trim(),
+      quantity: parseInt(quantity, 10) || 1,
+      value: value.trim(),
+      footprint: footprint.trim(),
+      mpn: mpn.trim(),
+      manufacturer: manufacturer.trim(),
+    }
+    try {
+      if (line) await api.updateBOMLine(line.id, body)
+      else await api.addBOMLine(boardID, body)
+      onSaved()
+    } catch {
+      setError('Could not save line')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-h">
+          <h3>{line ? 'Edit part' : 'Add part'}</h3>
+          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="modal-b space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <label className="fieldlabel" style={{ gridColumn: 'span 2' }}><span>References</span>
+              <input className="input mono" value={refs} onChange={(e) => setRefs(e.target.value)} placeholder="R1, R2" />
+            </label>
+            <label className="fieldlabel"><span>Qty</span>
+              <input type="number" min={1} className="input" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="fieldlabel"><span>Value</span>
+              <input className="input" value={value} autoFocus onChange={(e) => setValue(e.target.value)} placeholder="10k" />
+            </label>
+            <label className="fieldlabel"><span>Footprint</span>
+              <input className="input mono" value={footprint} onChange={(e) => setFootprint(e.target.value)} placeholder="0603" />
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="fieldlabel"><span>MPN</span>
+              <input className="input mono" value={mpn} onChange={(e) => setMpn(e.target.value)} placeholder="Manufacturer part no." />
+            </label>
+            <label className="fieldlabel"><span>Manufacturer</span>
+              <input className="input" value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} placeholder="e.g. Yageo" />
+            </label>
+          </div>
+          <p className="c-faint" style={{ fontSize: 12 }}>Matched to inventory automatically by MPN, then value + footprint.</p>
+          {error && <p className="c-crit text-sm">{error}</p>}
+        </div>
+        <div className="modal-f">
+          <button onClick={onClose} className="btn">Cancel</button>
+          <button onClick={save} disabled={busy} className="btn primary">{busy ? '…' : line ? 'Save' : 'Add part'}</button>
+        </div>
+      </div>
+    </div>
   )
 }
 

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { api, type Board, type BOMLine, type BOMLineInput, type Project, type ProjectAsset } from '../lib/api'
+import { api, type Board, type BOMLine, type BOMLineInput, type PickEntry, type PickList, type Project, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { num } from '../lib/format'
 import { IBomViewer } from '../components/IBomViewer'
 import { BoardThumb } from '../components/BoardThumb'
 import { AssetThumb, ImageViewer } from '../components/AssetImage'
 
-type Tab = 'info' | 'bom' | 'layout'
+type Tab = 'info' | 'bom' | 'layout' | 'assemble'
 
 export function BoardDetailPage() {
   const { projectId = '', boardId = '' } = useParams()
@@ -20,7 +20,7 @@ export function BoardDetailPage() {
   const [notFound, setNotFound] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const raw = searchParams.get('tab')
-  const tab: Tab = raw === 'bom' || raw === 'layout' ? raw : 'info'
+  const tab: Tab = raw === 'bom' || raw === 'layout' || raw === 'assemble' ? raw : 'info'
   const setTab = (t: Tab) => setSearchParams(t === 'info' ? {} : { tab: t })
 
   const reload = useCallback(() => {
@@ -89,6 +89,7 @@ export function BoardDetailPage() {
         <button className={`tab ${tab === 'info' ? 'on' : ''}`} onClick={() => setTab('info')}>Board info</button>
         <button className={`tab ${tab === 'bom' ? 'on' : ''}`} onClick={() => setTab('bom')}>Bill of materials</button>
         <button className={`tab ${tab === 'layout' ? 'on' : ''}`} onClick={() => setTab('layout')}>Board layout</button>
+        <button className={`tab ${tab === 'assemble' ? 'on' : ''}`} onClick={() => setTab('assemble')}>Assemble</button>
       </div>
 
       {tab === 'info' && (
@@ -105,6 +106,7 @@ export function BoardDetailPage() {
       )}
       {tab === 'bom' && <BomTab board={board} copies={copies} onChanged={reload} />}
       {tab === 'layout' && <LayoutTab asset={layoutAsset} onGoToFiles={() => setTab('info')} />}
+      {tab === 'assemble' && <AssembleTab boardID={boardId} board={board} onGoToBom={() => setTab('bom')} />}
     </div>
   )
 }
@@ -330,6 +332,219 @@ function LayoutTab({ asset, onGoToFiles }: { asset: ProjectAsset | null; onGoToF
       </p>
     </div>
   )
+}
+
+const pickedKey = (boardID: string) => `firebin.picked.${boardID}`
+const entryKey = (e: PickEntry) => `${e.stock_item_id}:${e.part_id}`
+const qtyFmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2))
+
+// AssembleTab turns a build quantity into a pick list: what to pull from which
+// bin (walk order), with shortfalls and unpickable (unmatched) lines, plus a
+// print view and check-off tracking.
+function AssembleTab({ boardID, board, onGoToBom }: { boardID: string; board: Board; onGoToBom: () => void }) {
+  const [qty, setQty] = useState(1)
+  const [pick, setPick] = useState<PickList | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem(pickedKey(boardID)) || '[]')
+      if (Array.isArray(s)) setPicked(new Set(s))
+    } catch { /* ignore */ }
+  }, [boardID])
+
+  useEffect(() => {
+    let live = true
+    setLoading(true)
+    const t = setTimeout(() => {
+      api.getPickList(boardID, qty)
+        .then((p) => { if (live) setPick(p) })
+        .catch(() => { if (live) setPick(null) })
+        .finally(() => { if (live) setLoading(false) })
+    }, 150)
+    return () => { live = false; clearTimeout(t) }
+  }, [boardID, qty])
+
+  const toggle = (k: string) => setPicked((prev) => {
+    const n = new Set(prev)
+    n.has(k) ? n.delete(k) : n.add(k)
+    try { localStorage.setItem(pickedKey(boardID), JSON.stringify([...n])) } catch { /* ignore */ }
+    return n
+  })
+
+  const groups = useMemo(() => {
+    const m = new Map<string, PickEntry[]>()
+    for (const e of pick?.entries ?? []) {
+      const loc = e.location_name || 'No bin'
+      const arr = m.get(loc) ?? []
+      arr.push(e)
+      m.set(loc, arr)
+    }
+    return [...m.entries()]
+  }, [pick])
+
+  const entries = pick?.entries ?? []
+  const done = entries.filter((e) => picked.has(entryKey(e))).length
+
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: '1fr', maxWidth: 760 }}>
+      <div className="card">
+        <div className="card-h" style={{ gap: 12 }}>
+          <h2>Assemble</h2>
+          <label className="flex items-center gap-2 text-sm c-dim" style={{ marginLeft: 'auto' }}>
+            Build
+            <input
+              type="number"
+              min={1}
+              className="input"
+              style={{ width: 72 }}
+              value={qty}
+              onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            />
+            {board.kind === 'panel' ? `panels (${board.copies}-up)` : 'boards'}
+          </label>
+          <button className="btn sm" disabled={!pick || entries.length === 0} onClick={() => pick && printPickList(pick)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" /></svg>
+            Print
+          </button>
+        </div>
+        <div className="c-dim text-sm" style={{ padding: '10px 14px' }}>
+          {loading && !pick ? 'Calculating…' : pick ? (
+            <>
+              {qtyFmt(pick.total_units)} parts to pick across {entries.length} bin pulls
+              {board.kind === 'panel' && <> · {qty}×{board.copies} = {qty * board.copies} boards</>}
+              {' · '}<span className={done === entries.length && entries.length > 0 ? 'c-ok' : ''}>{done}/{entries.length} picked</span>
+            </>
+          ) : 'Could not calculate the pick list.'}
+        </div>
+      </div>
+
+      {pick && pick.shortfalls.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--crit)' }}>
+          <div className="card-h"><h2 className="c-crit">Short of stock</h2></div>
+          <table className="tbl">
+            <tbody>
+              {pick.shortfalls.map((s) => (
+                <tr key={s.part_id}>
+                  <td className="c-text"><Link to={`/parts/${s.part_id}`} className="link">{s.part_name}</Link></td>
+                  <td className="num c-dim">need {qtyFmt(s.required)}</td>
+                  <td className="num c-dim">have {qtyFmt(s.available)}</td>
+                  <td className="num c-crit">short {qtyFmt(s.short)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {pick && entries.length > 0 ? (
+        <div className="card">
+          <div className="card-h"><h2>Pick list</h2><span className="c-faint text-sm" style={{ marginLeft: 'auto' }}>walk order by bin</span></div>
+          {groups.map(([loc, es]) => (
+            <div key={loc}>
+              <div className="eyebrow" style={{ padding: '10px 14px 4px' }}>{loc}</div>
+              <table className="tbl">
+                <tbody>
+                  {es.map((e) => {
+                    const k = entryKey(e)
+                    const on = picked.has(k)
+                    return (
+                      <tr key={k} className={on ? 'placed' : ''} style={{ cursor: 'pointer' }} onClick={() => toggle(k)}>
+                        <td style={{ width: 34 }} onClick={(ev) => ev.stopPropagation()}>
+                          <input type="checkbox" checked={on} onChange={() => toggle(k)} aria-label={`Picked ${e.part_name}`} />
+                        </td>
+                        <td className="num c-text" style={{ width: 60, fontWeight: 600 }}>{qtyFmt(e.quantity)}×</td>
+                        <td className="c-text" style={{ textDecoration: on ? 'line-through' : 'none', opacity: on ? 0.55 : 1 }}>
+                          <Link to={`/parts/${e.part_id}`} className="link" onClick={(ev) => ev.stopPropagation()}>{e.part_name}</Link>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      ) : !loading && pick && entries.length === 0 && (
+        <div className="card">
+          <p className="c-dim p-6 text-sm" style={{ lineHeight: 1.6 }}>
+            Nothing to pick. {pick.unmatched.length > 0
+              ? <>None of the BOM lines are matched to stocked parts yet; match them on the <button className="link" onClick={onGoToBom} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Bill of materials</button> tab.</>
+              : 'This board has no BOM lines.'}
+          </p>
+        </div>
+      )}
+
+      {pick && pick.unmatched.length > 0 && (
+        <div className="card">
+          <div className="card-h"><h2>Not picked <span className="c-faint" style={{ fontWeight: 400, fontSize: 13 }}>(no inventory match)</span></h2></div>
+          <table className="tbl">
+            <tbody>
+              {pick.unmatched.map((u, i) => (
+                <tr key={i}>
+                  <td className="num c-dim" style={{ width: 60 }}>{u.quantity}×</td>
+                  <td className="c-text">{u.value || <span className="c-faint">—</span>}</td>
+                  <td className="mono c-faint" style={{ fontSize: 12 }}>{u.refs}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="c-faint text-sm" style={{ padding: '0 14px 12px' }}>
+            Match these on the <button className="link" onClick={onGoToBom} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Bill of materials</button> tab to include them.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// printPickList opens a clean, print-friendly pick list in a new window.
+function printPickList(pick: PickList) {
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string))
+  const byLoc = new Map<string, PickEntry[]>()
+  for (const e of pick.entries) {
+    const loc = e.location_name || 'No bin'
+    const arr = byLoc.get(loc) ?? []
+    arr.push(e)
+    byLoc.set(loc, arr)
+  }
+  const rows = [...byLoc.entries()].map(([loc, es]) => `
+    <tr class="loc"><td colspan="3">${esc(loc)}</td></tr>
+    ${es.map((e) => `<tr><td class="chk">☐</td><td class="qty">${qtyFmt(e.quantity)}×</td><td>${esc(e.part_name)}</td></tr>`).join('')}
+  `).join('')
+  const short = pick.shortfalls.length === 0 ? '' : `
+    <h2 class="short">Short of stock</h2>
+    <table>${pick.shortfalls.map((s) => `<tr><td>${esc(s.part_name)}</td><td class="qty">need ${qtyFmt(s.required)}</td><td class="qty">have ${qtyFmt(s.available)}</td><td class="qty">short ${qtyFmt(s.short)}</td></tr>`).join('')}</table>`
+  const unmatched = pick.unmatched.length === 0 ? '' : `
+    <h2>Not picked (no inventory match)</h2>
+    <table>${pick.unmatched.map((u) => `<tr><td class="qty">${u.quantity}×</td><td>${esc(u.value)}</td><td class="refs">${esc(u.refs)}</td></tr>`).join('')}</table>`
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Pick list — ${esc(pick.board_name)}</title>
+    <style>
+      @page { size: letter; margin: 16mm; }
+      body { font: 13px/1.5 -apple-system, Segoe UI, Roboto, sans-serif; color: #111; }
+      h1 { font-size: 20px; margin: 0 0 2px; }
+      .sub { color: #555; margin: 0 0 16px; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+      td { padding: 5px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+      tr.loc td { background: #f2f2f2; font-weight: 700; border-bottom: 1px solid #bbb; }
+      .chk { width: 22px; font-size: 15px; }
+      .qty { width: 64px; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+      .refs { color: #666; font-family: ui-monospace, monospace; font-size: 11px; }
+      h2 { font-size: 14px; margin: 18px 0 6px; }
+      h2.short { color: #b00; }
+    </style></head><body>
+    <h1>Pick list — ${esc(pick.board_name)}</h1>
+    <p class="sub">Build ${pick.quantity}${pick.copies > 1 ? ` panel(s), ${pick.copies}-up` : ' board(s)'} · ${qtyFmt(pick.total_units)} parts</p>
+    <table>${rows || '<tr><td>Nothing to pick.</td></tr>'}</table>
+    ${short}${unmatched}
+    </body></html>`
+  const win = window.open('', '_blank')
+  if (!win) return
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+  setTimeout(() => win.print(), 250)
 }
 
 function BomTab({ board, copies, onChanged }: { board: Board; copies: number; onChanged: () => void }) {

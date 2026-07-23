@@ -77,6 +77,7 @@ export interface Board {
   project_id: string
   name: string
   description?: string
+  revision?: string
   source_filename?: string
   source_format: string
   kind: 'board' | 'panel'
@@ -97,6 +98,24 @@ export interface ProjectAsset {
   mime: string
   size: number
   created_at: string
+}
+
+export interface BoardPreview {
+  format: string
+  name: string
+  revision: string
+  line_count: number
+  panels: { name: string; copies: number }[]
+  ibom: string
+  renders: string[]
+}
+
+export interface UploadBoardOpts {
+  name?: string
+  revision?: string
+  keepPanels?: boolean
+  keepRenders?: boolean
+  attachIbom?: boolean
 }
 
 export type MatchKind = 'mpn' | 'value_footprint' | 'none'
@@ -498,10 +517,19 @@ export const api = {
   deleteProject(id: string) {
     return request<{ status: string }>(`/projects/${id}`, { method: 'DELETE' })
   },
-  uploadBoard(projectID: string, file: File, name?: string) {
+  previewBoard(projectID: string, file: File) {
     const form = new FormData()
     form.append('file', file)
-    if (name) form.append('name', name)
+    return request<BoardPreview>(`/projects/${projectID}/boards/preview`, { method: 'POST', body: form })
+  },
+  uploadBoard(projectID: string, file: File, opts: UploadBoardOpts = {}) {
+    const form = new FormData()
+    form.append('file', file)
+    if (opts.name) form.append('name', opts.name)
+    if (opts.revision) form.append('revision', opts.revision)
+    if (opts.keepPanels === false) form.append('keep_panels', 'false')
+    if (opts.keepRenders === false) form.append('keep_renders', 'false')
+    if (opts.attachIbom === false) form.append('attach_ibom', 'false')
     return request<Board>(`/projects/${projectID}/boards`, { method: 'POST', body: form })
   },
   getBoard(id: string) {

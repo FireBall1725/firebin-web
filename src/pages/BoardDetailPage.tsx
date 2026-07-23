@@ -17,7 +17,7 @@ export function BoardDetailPage() {
   const [board, setBoard] = useState<Board | null>(null)
   const [ibom, setIbom] = useState<ProjectAsset | null>(null)
   const [notFound, setNotFound] = useState(false)
-  const [tab, setTab] = useState<Tab>('bom')
+  const [tab, setTab] = useState<Tab>('info')
 
   const reload = useCallback(() => {
     api.getBoard(boardId).then(setBoard).catch(() => setNotFound(true))
@@ -63,6 +63,7 @@ export function BoardDetailPage() {
           {board.name}
         </h1>
         <div className="flex flex-wrap items-center gap-2">
+          {board.revision && <span className="pill ghost">rev {board.revision}</span>}
           {board.source_filename && <span className="tag mono" style={{ fontSize: 11 }}>{board.source_filename}</span>}
           {isPanel && <span className="pill accent">{copies}-up</span>}
           <span className="pill ghost">{lines.length} lines · {num(totalParts)} parts</span>
@@ -79,7 +80,7 @@ export function BoardDetailPage() {
       {tab === 'info' && <InfoTab board={board} ibom={ibom} matched={matched} totalParts={totalParts} />}
       {tab === 'bom' && <BomTab board={board} copies={copies} />}
       {tab === 'layout' && (
-        <div style={{ height: 'calc(100vh - 300px)', minHeight: 480 }}>
+        <div>
           {ibom ? (
             <IBomViewer asset={ibom} inline showPlaced={false} />
           ) : (
@@ -105,6 +106,7 @@ function InfoTab({ board, ibom, matched, totalParts }: { board: Board; ibom: Pro
         <table className="tbl">
           <tbody>
             <Row k="Type" v={board.kind === 'panel' ? `Panel (${board.copies}-up)` : 'Board'} />
+            <Row k="Revision" v={board.revision || '—'} />
             <Row k="Source file" v={board.source_filename || '—'} mono />
             <Row k="BOM lines" v={String(lines.length)} />
             <Row k="Total parts" v={num(totalParts)} />

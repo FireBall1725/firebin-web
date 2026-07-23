@@ -94,7 +94,7 @@ export interface ProjectAsset {
   project_id: string
   board_id?: string
   name: string
-  kind: 'ibom' | 'image' | 'other'
+  kind: 'ibom' | 'image' | 'pcbrender' | 'other'
   mime: string
   size: number
   created_at: string

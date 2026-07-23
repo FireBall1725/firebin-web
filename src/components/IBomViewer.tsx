@@ -9,7 +9,7 @@ import {
   buildRefIndex,
   drawBoard,
   fitView,
-  parseIbom,
+  pcbFromAsset,
   type Footprint,
   type Pcb,
   type Side,
@@ -53,11 +53,11 @@ export function IBomViewer({
       .assetBlob(asset.id)
       .then((b) => b.text())
       .then((text) => {
-        const p = parseIbom(text)
-        if (!p) setError('Could not read the iBOM data.')
+        const p = pcbFromAsset(text, asset.kind)
+        if (!p) setError('Could not read the board data.')
         else setPcb(p)
       })
-      .catch(() => setError('Could not load the iBOM.'))
+      .catch(() => setError('Could not load the board.'))
     if (boardID) api.getBoard(boardID).then((b) => setLines(b.lines ?? [])).catch(() => undefined)
   }, [asset.id, boardID])
 

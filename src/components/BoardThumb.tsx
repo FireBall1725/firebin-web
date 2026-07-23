@@ -3,13 +3,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { DPR, buildRefIndex, drawBoard, fitView, parseIbom, type Pcb, type Side } from '../lib/ibom'
+import { DPR, buildRefIndex, drawBoard, fitView, pcbFromAsset, type Pcb, type Side } from '../lib/ibom'
 
 const EMPTY = new Set<string>()
 
-// BoardThumb renders a small static board image from an iBOM asset's pcbdata.
-// Used on project tiles; no interaction.
-export function BoardThumb({ assetId, side = 'F' }: { assetId: string; side?: Side }) {
+// BoardThumb renders a small static board image from a render asset's pcbdata
+// (a real iBOM or a generated pcbrender). Used on project tiles; no interaction.
+export function BoardThumb({ assetId, kind, side = 'F' }: { assetId: string; kind: string; side?: Side }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [pcb, setPcb] = useState<Pcb | null>(null)
@@ -20,13 +20,13 @@ export function BoardThumb({ assetId, side = 'F' }: { assetId: string; side?: Si
       .assetBlob(assetId)
       .then((b) => b.text())
       .then((t) => {
-        if (!cancelled) setPcb(parseIbom(t))
+        if (!cancelled) setPcb(pcbFromAsset(t, kind))
       })
       .catch(() => undefined)
     return () => {
       cancelled = true
     }
-  }, [assetId])
+  }, [assetId, kind])
 
   useEffect(() => {
     const wrap = wrapRef.current

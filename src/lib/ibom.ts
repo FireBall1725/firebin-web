@@ -61,6 +61,20 @@ export function parseIbom(html: string): Pcb | null {
   return null
 }
 
+// pcbFromAsset parses board render data from an asset: a real iBOM ('ibom') is
+// HTML with compressed pcbdata; our generated render ('pcbrender') is the
+// pcbdata JSON directly.
+export function pcbFromAsset(text: string, kind: string): Pcb | null {
+  if (kind === 'pcbrender') {
+    try {
+      return JSON.parse(text) as Pcb
+    } catch {
+      return null
+    }
+  }
+  return parseIbom(text)
+}
+
 export function buildRefIndex(pcb: Pcb | null): Map<string, Footprint> {
   const m = new Map<string, Footprint>()
   for (const f of pcb?.footprints ?? []) m.set(f.ref.toUpperCase(), f)

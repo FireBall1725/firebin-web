@@ -44,7 +44,9 @@ export function ProjectDetailPage() {
   }
 
   const boards = project.boards ?? []
-  const ibomFor = (board: Board) => assets.find((a) => a.kind === 'ibom' && a.board_id === board.id)
+  const renderFor = (board: Board) =>
+    assets.find((a) => a.kind === 'ibom' && a.board_id === board.id) ??
+    assets.find((a) => a.kind === 'pcbrender' && a.board_id === board.id)
   const ibomAssets = assets.filter((a) => a.kind === 'ibom')
   const imageAssets = assets.filter((a) => a.kind === 'image')
 
@@ -84,11 +86,11 @@ export function ProjectDetailPage() {
         ) : (
           <div className="tiles">
             {boards.map((b) => {
-              const ib = ibomFor(b)
+              const ib = renderFor(b)
               return (
                 <Link key={b.id} to={`/projects/${project.id}/boards/${b.id}`} className="tile">
                   <div className="tile-art">
-                    {ib ? <BoardThumb assetId={ib.id} /> : <BoardGlyph />}
+                    {ib ? <BoardThumb assetId={ib.id} kind={ib.kind} /> : <BoardGlyph />}
                   </div>
                   <div className="tile-name truncate">{b.name}</div>
                   <div className="tile-sub">
@@ -110,7 +112,7 @@ export function ProjectDetailPage() {
           <div className="tiles">
             {ibomAssets.map((a) => (
               <button key={a.id} className="tile" onClick={() => setViewingIbom(a)}>
-                <div className="tile-art"><BoardThumb assetId={a.id} /></div>
+                <div className="tile-art"><BoardThumb assetId={a.id} kind={a.kind} /></div>
                 <div className="tile-name truncate">Interactive BOM</div>
                 <div className="tile-sub"><span className="c-faint mono" style={{ fontSize: 10.5 }}>{a.name}</span></div>
               </button>

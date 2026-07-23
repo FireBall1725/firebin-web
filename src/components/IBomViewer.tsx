@@ -20,7 +20,7 @@ type Side = 'F' | 'B'
 interface Footprint {
   ref: string
   layer: Side
-  bbox: { pos: [number, number]; size: [number, number]; angle: number }
+  bbox: { pos: [number, number]; relpos?: [number, number]; size: [number, number]; angle: number }
   pads?: Pad[]
 }
 interface Pad {
@@ -391,14 +391,20 @@ function drawBoard(
     const visible = pads.length ? pads.some(onSide) : f.layer === side
     if (!visible) continue
     const { pos, size, angle } = f.bbox
+    // The box corner sits at relpos relative to the footprint anchor (pos), in
+    // the anchor's rotated frame — the anchor isn't the geometric centre for
+    // off-centre footprints like connectors, so fall back to a centred box only
+    // when relpos is absent.
+    const rel = f.bbox.relpos ?? [-size[0] / 2, -size[1] / 2]
     ctx.save()
     ctx.translate(pos[0], pos[1])
     ctx.rotate((-angle * Math.PI) / 180)
+    ctx.translate(rel[0], rel[1])
     ctx.fillStyle = accent
     ctx.globalAlpha = 0.22
-    ctx.fillRect(-size[0] / 2, -size[1] / 2, size[0], size[1])
+    ctx.fillRect(0, 0, size[0], size[1])
     ctx.globalAlpha = 1
-    ctx.strokeRect(-size[0] / 2, -size[1] / 2, size[0], size[1])
+    ctx.strokeRect(0, 0, size[0], size[1])
     ctx.restore()
   }
 

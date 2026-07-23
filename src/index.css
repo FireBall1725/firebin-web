@@ -264,12 +264,24 @@ body {
 .ibom-row:hover, .ibom-row.on { background: var(--panel-2); }
 .ibom-row.on td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .ibom-row.placed td { opacity: 0.5; }
-.ibom-row.placed td:nth-child(4) { text-decoration: line-through; }
 .ibom-bom input[type='checkbox'] { cursor: pointer; accent-color: var(--accent); }
+/* Expand caret + per-reference sub-rows. */
+.ibom-caret {
+  display: grid; place-items: center; width: 20px; height: 20px; padding: 0; cursor: pointer;
+  background: none; border: none; color: var(--faint); border-radius: 5px; transition: transform 0.12s, color 0.12s, background 0.12s;
+}
+.ibom-caret:hover { color: var(--text); background: var(--panel-2); }
+.ibom-caret svg { width: 12px; height: 12px; }
+.ibom-caret.open { transform: rotate(90deg); }
+.ibom-subrow td { background: rgba(255, 255, 255, 0.015); }
+.ibom-subrow:hover td, .ibom-subrow.on td { background: var(--accent-soft); }
+.ibom-subrow.on td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.ibom-subrow.placed td { opacity: 0.5; text-decoration: line-through; }
 .ibom-canvas { flex: 1 1 auto; min-width: 0; position: relative; background: #0b0e13; overflow: hidden; }
 .ibom-canvas canvas { display: block; touch-action: none; }
 .ibom-tools { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; align-items: center; }
-.ibom-tools .seg { background: rgba(20, 26, 34, 0.85); backdrop-filter: blur(4px); height: 34px; }
+.ibom-tools .seg { background: rgba(20, 26, 34, 0.85); backdrop-filter: blur(4px); height: 34px; align-items: stretch; }
+.ibom-tools .seg-btn { display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; }
 .ibom-tools .btn { background: rgba(20, 26, 34, 0.85); backdrop-filter: blur(4px); height: 34px; padding: 0 14px; display: inline-flex; align-items: center; }
 .ibom-hint { position: absolute; bottom: 10px; left: 12px; font-size: 11px; pointer-events: none; opacity: 0.7; }
 @media (max-width: 820px) {
@@ -322,6 +334,8 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
   border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--panel-2);
 }
 .tbl tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; color: var(--text); }
+/* Truncate an over-long cell to keep the table within its card (hover for full). */
+.cell-trunc { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 .tbl tbody tr:last-child td { border-bottom: none; }
 .tbl .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .tbl tbody tr.hoverable:hover td { background: var(--accent-soft); cursor: pointer; }

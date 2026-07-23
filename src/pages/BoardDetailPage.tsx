@@ -9,6 +9,7 @@ import { num } from '../lib/format'
 import { IBomViewer } from '../components/IBomViewer'
 import { BoardThumb } from '../components/BoardThumb'
 import { AssetThumb, ImageViewer } from '../components/AssetImage'
+import { PartPicker } from '../components/PartPicker'
 
 type Tab = 'info' | 'bom' | 'layout' | 'assemble'
 
@@ -748,62 +749,6 @@ function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line:
           <button onClick={save} disabled={busy} className="btn primary">{busy ? '…' : line ? 'Save' : 'Add part'}</button>
         </div>
       </div>
-    </div>
-  )
-}
-
-// PartPicker is a small search-and-select used to pin a BOM line to a specific
-// inventory part (a manual substitution / override).
-function PartPicker({ onPick }: { onPick: (p: { id: string; name: string }) => void }) {
-  const [q, setQ] = useState('')
-  const [results, setResults] = useState<{ id: string; name: string }[]>([])
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    const s = q.trim()
-    if (!s) { setResults([]); return }
-    let live = true
-    const t = setTimeout(() => {
-      api.listParts({ search: s, topLevel: false })
-        .then((ps) => { if (live) { setResults(ps.slice(0, 8).map((p) => ({ id: p.id, name: p.name }))); setOpen(true) } })
-        .catch(() => { if (live) setResults([]) })
-    }, 200)
-    return () => { live = false; clearTimeout(t) }
-  }, [q])
-
-  return (
-    <div style={{ marginTop: 6 }}>
-      <input
-        className="input"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        onFocus={() => results.length && setOpen(true)}
-        placeholder="Search inventory…"
-      />
-      {open && results.length > 0 && (
-        <div
-          style={{
-            marginTop: 4, border: '1px solid var(--border)', borderRadius: 8,
-            overflow: 'hidden', maxHeight: 180, overflowY: 'auto',
-          }}
-        >
-          {results.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => { onPick(p); setOpen(false); setQ('') }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
-                background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 13, cursor: 'pointer',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

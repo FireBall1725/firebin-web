@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api, type Board, type BOMLine, type BOMLineInput, type Project, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
@@ -195,19 +195,28 @@ function FilesCard({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const upload = async (f: File) => {
+  const upload = async (files: File[]) => {
+    if (files.length === 0) return
     setBusy(true)
     setError(null)
     try {
-      await api.uploadBoardAsset(boardID, f)
+      for (const f of files) await api.uploadBoardAsset(boardID, f)
       onChanged()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not upload that file')
     } finally {
       setBusy(false)
     }
+  }
+
+  const onDrop = (e: ReactDragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    if (busy) return
+    upload(Array.from(e.dataTransfer.files))
   }
 
   const del = async (a: ProjectAsset) => {
@@ -223,7 +232,13 @@ function FilesCard({
   const empty = !ibom && images.length === 0
 
   return (
-    <div className="card">
+    <div
+      className="card"
+      style={{ position: 'relative', outline: dragging ? '2px dashed var(--accent)' : 'none', outlineOffset: -2 }}
+      onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true) }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false) }}
+      onDrop={onDrop}
+    >
       <div className="card-h">
         <h2>Files</h2>
         <button className="btn sm primary" style={{ marginLeft: 'auto' }} disabled={busy} onClick={() => inputRef.current?.click()}>
@@ -233,15 +248,16 @@ function FilesCard({
         <input
           ref={inputRef}
           type="file"
+          multiple
           accept=".html,.htm,.png,.jpg,.jpeg,.gif,.webp,.svg,.bmp"
           hidden
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
+          onChange={(e) => { upload(Array.from(e.target.files ?? [])); e.target.value = '' }}
         />
       </div>
       {error && <p className="c-crit text-sm" style={{ padding: '0 12px' }}>{error}</p>}
       {empty ? (
         <p className="c-faint text-sm" style={{ padding: 16, lineHeight: 1.6 }}>
-          No files yet. Upload an interactive BOM (<span className="mono">.html</span> from the{' '}
+          No files yet. Drag files here or use Upload: an interactive BOM (<span className="mono">.html</span> from the{' '}
           <a href="https://github.com/openscopeproject/InteractiveHtmlBom" target="_blank" rel="noreferrer" className="link">Interactive HTML BOM</a>{' '}
           plugin) to drive the board layout, or images (renders, photos).
         </p>
@@ -257,6 +273,14 @@ function FilesCard({
               <AssetThumb asset={a} />
             </FileTile>
           ))}
+        </div>
+      )}
+      {dragging && (
+        <div
+          className="grid place-items-center"
+          style={{ position: 'absolute', inset: 0, borderRadius: 12, background: 'rgba(0,0,0,0.55)', pointerEvents: 'none', zIndex: 3 }}
+        >
+          <span className="c-text text-sm" style={{ fontWeight: 600 }}>Drop files to upload</span>
         </div>
       )}
     </div>

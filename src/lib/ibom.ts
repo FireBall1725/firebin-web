@@ -75,9 +75,17 @@ export function pcbFromAsset(text: string, kind: string): Pcb | null {
   return parseIbom(text)
 }
 
-export function buildRefIndex(pcb: Pcb | null): Map<string, Footprint> {
-  const m = new Map<string, Footprint>()
-  for (const f of pcb?.footprints ?? []) m.set(f.ref.toUpperCase(), f)
+// buildRefIndex groups footprints by reference designator. It's a multimap
+// because a panel repeats every ref once per copy (6 footprints named "BZ1"),
+// and selecting a BOM line must highlight all of them, not just one.
+export function buildRefIndex(pcb: Pcb | null): Map<string, Footprint[]> {
+  const m = new Map<string, Footprint[]>()
+  for (const f of pcb?.footprints ?? []) {
+    const k = f.ref.toUpperCase()
+    const arr = m.get(k)
+    if (arr) arr.push(f)
+    else m.set(k, [f])
+  }
   return m
 }
 
@@ -93,7 +101,7 @@ export function fitView(bb: Pcb['edges_bbox'], cssW: number, cssH: number, pad =
 export function drawBoard(
   ctx: CanvasRenderingContext2D,
   pcb: Pcb,
-  byRef: Map<string, Footprint>,
+  byRef: Map<string, Footprint[]>,
   selected: Set<string>,
   placed: Set<string>,
   side: Side,
@@ -148,23 +156,24 @@ export function drawBoard(
   ctx.strokeStyle = accent
   ctx.lineWidth = 2 / view.scale
   for (const ref of selected) {
-    const f = byRef.get(ref)
-    if (!f) continue
-    const pads = f.pads ?? []
-    const visible = pads.length ? pads.some(onSide) : f.layer === side
-    if (!visible) continue
-    const { pos, size, angle } = f.bbox
-    const rel = f.bbox.relpos ?? [-size[0] / 2, -size[1] / 2]
-    ctx.save()
-    ctx.translate(pos[0], pos[1])
-    ctx.rotate((-angle * Math.PI) / 180)
-    ctx.translate(rel[0], rel[1])
-    ctx.fillStyle = accent
-    ctx.globalAlpha = 0.22
-    ctx.fillRect(0, 0, size[0], size[1])
-    ctx.globalAlpha = 1
-    ctx.strokeRect(0, 0, size[0], size[1])
-    ctx.restore()
+    // Highlight every footprint sharing this ref — a panel has one per copy.
+    for (const f of byRef.get(ref) ?? []) {
+      const pads = f.pads ?? []
+      const visible = pads.length ? pads.some(onSide) : f.layer === side
+      if (!visible) continue
+      const { pos, size, angle } = f.bbox
+      const rel = f.bbox.relpos ?? [-size[0] / 2, -size[1] / 2]
+      ctx.save()
+      ctx.translate(pos[0], pos[1])
+      ctx.rotate((-angle * Math.PI) / 180)
+      ctx.translate(rel[0], rel[1])
+      ctx.fillStyle = accent
+      ctx.globalAlpha = 0.22
+      ctx.fillRect(0, 0, size[0], size[1])
+      ctx.globalAlpha = 1
+      ctx.strokeRect(0, 0, size[0], size[1])
+      ctx.restore()
+    }
   }
 
   ctx.restore()

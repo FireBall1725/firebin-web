@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, type Project, type Board, type ProjectAsset, type BoardPreview } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { BoardThumb } from '../components/BoardThumb'
+import { PartPicker } from '../components/PartPicker'
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams()
@@ -137,11 +138,22 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
   const [keepPanels, setKeepPanels] = useState(true)
   const [keepRenders, setKeepRenders] = useState(true)
   const [attachIbom, setAttachIbom] = useState(true)
+  const [matchedKeys, setMatchedKeys] = useState<Set<string>>(new Set())
+
+  const matchOne = async (key: string, part: { id: string; name: string }) => {
+    try {
+      await api.setProjectMatch(projectID, key, part.id)
+      setMatchedKeys((prev) => new Set(prev).add(key))
+    } catch {
+      setError('Could not save that match')
+    }
+  }
 
   const pick = async (f: File) => {
     setFile(f)
     setBusy(true)
     setError(null)
+    setMatchedKeys(new Set())
     try {
       const p = await api.previewBoard(projectID, f)
       setPreview(p)
@@ -264,6 +276,47 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
                   </label>
                 )}
               </div>
+
+              {(() => {
+                const unmatched = preview.unmatched.filter((u) => !matchedKeys.has(u.key))
+                const matched = preview.matched + matchedKeys.size
+                if (preview.line_count === 0) return null
+                return (
+                  <div>
+                    <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                      <span className="eyebrow">Inventory match</span>
+                      <span className={`pill ${matched === preview.line_count ? 'ok' : 'low'}`} style={{ fontSize: 11 }}>
+                        {matched}/{preview.line_count} matched
+                      </span>
+                    </div>
+                    {unmatched.length === 0 ? (
+                      <p className="c-faint" style={{ fontSize: 12 }}>
+                        {preview.unmatched.length === 0
+                          ? 'Every line resolved to inventory automatically.'
+                          : 'All set — the rest will match on commit.'}
+                      </p>
+                    ) : (
+                      <>
+                        <p className="c-faint" style={{ fontSize: 12, marginBottom: 6 }}>
+                          Match the leftovers now (optional). A match applies to every board in this project.
+                        </p>
+                        <div className="space-y-2" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                          {unmatched.map((u) => (
+                            <div key={u.key} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
+                              <div className="flex items-center gap-2" style={{ fontSize: 12.5 }}>
+                                <span className="c-text" style={{ fontWeight: 600 }}>{u.value || <span className="c-faint">(no value)</span>}</span>
+                                {u.mpn && <span className="mono c-faint" style={{ fontSize: 11 }}>{u.mpn}</span>}
+                                <span className="mono c-faint" style={{ fontSize: 11, marginLeft: 'auto' }}>{u.refs}</span>
+                              </div>
+                              <PartPicker onPick={(p) => matchOne(u.key, p)} placeholder="Match to a part…" />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
 
               {error && <p className="c-crit text-sm">{error}</p>}
             </div>

@@ -105,9 +105,19 @@ export interface BoardPreview {
   name: string
   revision: string
   line_count: number
+  matched: number
+  unmatched: PreviewUnmatched[]
   panels: { name: string; copies: number }[]
   ibom: string
   renders: string[]
+}
+
+export interface PreviewUnmatched {
+  key: string
+  refs: string
+  value: string
+  footprint: string
+  mpn: string
 }
 
 export interface BOMLineInput {
@@ -571,6 +581,12 @@ export const api = {
     const form = new FormData()
     form.append('file', file)
     return request<BoardPreview>(`/projects/${projectID}/boards/preview`, { method: 'POST', body: form })
+  },
+  setProjectMatch(projectID: string, matchKey: string, partID: string) {
+    return request<{ status: string }>(`/projects/${projectID}/matches`, {
+      method: 'POST',
+      body: JSON.stringify({ match_key: matchKey, part_id: partID }),
+    })
   },
   createBlankBoard(projectID: string, body: { name: string; revision?: string }) {
     return request<Board>(`/projects/${projectID}/boards/blank`, { method: 'POST', body: JSON.stringify(body) })

@@ -117,7 +117,12 @@ export interface BOMLineInput {
   footprint?: string
   mpn?: string
   manufacturer?: string
+  supplier_sku?: string
+  ipn?: string
   description?: string
+  // Pin the line to a specific inventory part ("none" clears the match). Absent
+  // leaves the match to auto-resolution.
+  part_id?: string
 }
 
 export interface UploadBoardOpts {
@@ -128,7 +133,7 @@ export interface UploadBoardOpts {
   attachIbom?: boolean
 }
 
-export type MatchKind = 'mpn' | 'value_footprint' | 'none'
+export type MatchKind = 'fbpn' | 'mpn' | 'supplier' | 'value_footprint' | 'manual' | 'none'
 
 export interface BOMLine {
   id: string
@@ -139,6 +144,8 @@ export interface BOMLine {
   footprint: string
   mpn?: string
   manufacturer?: string
+  supplier_sku?: string
+  ipn?: string
   description?: string
   part_id?: string
   part_name?: string
@@ -152,6 +159,7 @@ export interface Part {
   variant_of?: string
   name: string
   description?: string
+  ipn?: string
   package?: string
   keywords?: string
   barcode?: string
@@ -237,6 +245,7 @@ export interface PartInput {
   category_id?: string | null
   variant_of?: string | null
   description?: string | null
+  ipn?: string | null
   package?: string | null
   keywords?: string | null
   is_template?: boolean

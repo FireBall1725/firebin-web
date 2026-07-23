@@ -219,7 +219,7 @@ export function IBomViewer({
                 <tr>
                   {showPlaced && <th style={{ width: 34 }} title="Placed"></th>}
                   <th className="num" style={{ width: 34 }}>Qty</th>
-                  <th>Refs</th>
+                  <th>References</th>
                   <th>Value</th>
                   <th>Inventory</th>
                 </tr>

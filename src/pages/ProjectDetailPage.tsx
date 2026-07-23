@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, type Project, type Board, type ProjectAsset } from '../lib/api'
+import { api, type Project, type Board, type ProjectAsset, type BoardPreview } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { IBomViewer } from '../components/IBomViewer'
 import { BoardThumb } from '../components/BoardThumb'
@@ -87,6 +87,7 @@ export function ProjectDetailPage() {
                   </div>
                   <div className="tile-name truncate">{b.name}</div>
                   <div className="tile-sub">
+                    {b.revision && <span className="pill ghost">rev {b.revision}</span>}
                     {b.kind === 'panel' && <span className="pill accent">{b.copies}-up</span>}
                     <span className="c-faint">{b.line_count} lines</span>
                   </div>
@@ -134,19 +135,50 @@ function BoardGlyph() {
   )
 }
 
-// UploadModal wraps the dropzone so an Upload button brings up the upload box.
+// UploadModal is a two-step wizard: drop a file, then map/confirm what was
+// detected (board name, revision, panel, iBOM, renders) before committing.
 function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClose: () => void; onDone: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [name, setName] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<BoardPreview | null>(null)
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [revision, setRevision] = useState('')
+  const [keepPanels, setKeepPanels] = useState(true)
+  const [keepRenders, setKeepRenders] = useState(true)
+  const [attachIbom, setAttachIbom] = useState(true)
 
-  const upload = async (file: File) => {
+  const pick = async (f: File) => {
+    setFile(f)
     setBusy(true)
     setError(null)
     try {
-      await api.uploadBoard(projectID, file, name.trim() || undefined)
+      const p = await api.previewBoard(projectID, f)
+      setPreview(p)
+      setName(p.name)
+      setRevision(p.revision)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not read that file')
+      setFile(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const create = async () => {
+    if (!file) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.uploadBoard(projectID, file, {
+        name: name.trim() || undefined,
+        revision: revision.trim() || undefined,
+        keepPanels,
+        keepRenders,
+        attachIbom,
+      })
       onDone()
       onClose()
     } catch (e) {
@@ -160,48 +192,97 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
     e.preventDefault()
     setDragging(false)
     if (busy) return
-    const file = e.dataTransfer.files?.[0]
-    if (file) upload(file)
+    const f = e.dataTransfer.files?.[0]
+    if (f) pick(f)
   }
 
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
-          <h3>Upload to project</h3>
+          <h3>{preview ? 'Confirm upload' : 'Upload to project'}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
-        <div className="modal-b space-y-3">
-          <label className="fieldlabel">
-            <span>Board name (optional)</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Main board — defaults to the filename" />
-          </label>
-          <label
-            className={`dropzone ${dragging ? 'over' : ''} ${busy ? 'busy' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="26" height="26">
-              <path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-            </svg>
-            <div className="dz-title">{busy ? 'Parsing…' : dragging ? 'Drop to upload' : 'Drag a KiCad file here, or click to browse'}</div>
-            <div className="dz-sub">
-              A zipped KiCad project <span className="mono">.zip</span> (best — merges all sheets and pulls in renders/iBOM), a single <span className="mono">.kicad_sch</span>, or a KiCad BOM <span className="mono">.csv</span>.
+
+        {!preview ? (
+          <div className="modal-b">
+            <label
+              className={`dropzone ${dragging ? 'over' : ''} ${busy ? 'busy' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="26" height="26">
+                <path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </svg>
+              <div className="dz-title">{busy ? 'Reading…' : dragging ? 'Drop to read' : 'Drag a KiCad file here, or click to browse'}</div>
+              <div className="dz-sub">
+                A zipped KiCad project <span className="mono">.zip</span> (best — merges all sheets and pulls in renders/iBOM), a single <span className="mono">.kicad_sch</span>, or a KiCad BOM <span className="mono">.csv</span>.
+              </div>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".zip,.kicad_sch,.csv,.tsv"
+                hidden
+                disabled={busy}
+                onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])}
+              />
+            </label>
+            {error && <p className="c-crit text-sm" style={{ marginTop: 8 }}>{error}</p>}
+          </div>
+        ) : (
+          <>
+            <div className="modal-b space-y-4">
+              <p className="c-dim" style={{ fontSize: 12.5, margin: 0 }}>
+                Detected in <span className="mono">{file?.name}</span>: {preview.line_count}-line BOM
+                {preview.panels.length > 0 && `, ${preview.panels.length} panel`}
+                {preview.ibom && ', interactive BOM'}
+                {preview.renders.length > 0 && `, ${preview.renders.length} render${preview.renders.length === 1 ? '' : 's'}`}.
+              </p>
+
+              <div className="grid grid-cols-2 gap-4">
+                <label className="fieldlabel"><span>Board name</span>
+                  <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Board name" />
+                </label>
+                <label className="fieldlabel">
+                  <span>Revision{preview.revision ? ' (from title block)' : ''}</span>
+                  <input className="input" value={revision} onChange={(e) => setRevision(e.target.value)} placeholder="A" />
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                {preview.panels.length > 0 && (
+                  <label className="flex items-center gap-2 text-sm c-dim">
+                    <input type="checkbox" checked={keepPanels} onChange={(e) => setKeepPanels(e.target.checked)} />
+                    Include panel as a board ({preview.panels.map((p) => `${p.copies}-up`).join(', ')})
+                  </label>
+                )}
+                {preview.ibom && (
+                  <label className="flex items-center gap-2 text-sm c-dim">
+                    <input type="checkbox" checked={attachIbom} onChange={(e) => setAttachIbom(e.target.checked)} />
+                    Attach the interactive BOM to this board
+                  </label>
+                )}
+                {preview.renders.length > 0 && (
+                  <label className="flex items-center gap-2 text-sm c-dim">
+                    <input type="checkbox" checked={keepRenders} onChange={(e) => setKeepRenders(e.target.checked)} />
+                    Keep {preview.renders.length} render{preview.renders.length === 1 ? '' : 's'}
+                  </label>
+                )}
+              </div>
+
+              {error && <p className="c-crit text-sm">{error}</p>}
             </div>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".zip,.kicad_sch,.csv,.tsv"
-              hidden
-              disabled={busy}
-              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-            />
-          </label>
-          {error && <p className="c-crit text-sm">{error}</p>}
-        </div>
+            <div className="modal-f">
+              <button className="btn" onClick={() => { setPreview(null); setFile(null); setError(null) }}>Back</button>
+              <button className="btn primary" disabled={busy || !name.trim()} onClick={create}>
+                {busy ? '…' : 'Create board'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

@@ -31,7 +31,13 @@ export function BoardDetailPage() {
     api.getProject(projectId).then(setProject).catch(() => undefined)
     api
       .listProjectAssets(projectId)
-      .then((as) => setIbom(as.find((a) => a.kind === 'ibom' && a.board_id === boardId) ?? null))
+      .then((as) =>
+        setIbom(
+          as.find((a) => a.kind === 'ibom' && a.board_id === boardId) ??
+            as.find((a) => a.kind === 'pcbrender' && a.board_id === boardId) ??
+            null,
+        ),
+      )
       .catch(() => undefined)
   }, [projectId, boardId, reload])
 
@@ -108,7 +114,7 @@ function InfoTab({ board, ibom, matched, totalParts }: { board: Board; ibom: Pro
     <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0, 320px) 1fr' }}>
       <div className="card" style={{ padding: 12 }}>
         <div style={{ aspectRatio: '4 / 3', borderRadius: 8, background: '#0b0e13', overflow: 'hidden' }}>
-          {ibom ? <BoardThumb assetId={ibom.id} /> : <div className="grid place-items-center" style={{ height: '100%' }}><span className="c-faint text-sm">No render</span></div>}
+          {ibom ? <BoardThumb assetId={ibom.id} kind={ibom.kind} /> : <div className="grid place-items-center" style={{ height: '100%' }}><span className="c-faint text-sm">No render</span></div>}
         </div>
       </div>
       <div className="card">

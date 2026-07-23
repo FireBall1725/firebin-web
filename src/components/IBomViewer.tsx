@@ -25,10 +25,12 @@ export function IBomViewer({
   asset,
   onClose,
   showPlaced = true,
+  inline = false,
 }: {
   asset: ProjectAsset
-  onClose: () => void
+  onClose?: () => void
   showPlaced?: boolean
+  inline?: boolean
 }) {
   const boardID = asset.board_id ?? ''
   const [pcb, setPcb] = useState<Pcb | null>(null)
@@ -196,18 +198,19 @@ export function IBomViewer({
 
   const placedCount = lines.filter((l) => placed.has(l.id)).length
 
-  return (
-    <div className="overlay" onClick={onClose}>
-      <div className="viewer ibom-viewer" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-h">
-          <h3 className="truncate">Interactive BOM{pcb?.metadata?.title ? ` · ${pcb.metadata.title}` : ''}</h3>
-          {showPlaced && lines.length > 0 && (
-            <span className="pill ghost" style={{ marginLeft: 10 }}>{placedCount}/{lines.length} placed</span>
-          )}
-          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
-        </div>
+  const body = (
+    <>
+        {!inline && (
+          <div className="modal-h">
+            <h3 className="truncate">Interactive BOM{pcb?.metadata?.title ? ` · ${pcb.metadata.title}` : ''}</h3>
+            {showPlaced && lines.length > 0 && (
+              <span className="pill ghost" style={{ marginLeft: 10 }}>{placedCount}/{lines.length} placed</span>
+            )}
+            <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            </button>
+          </div>
+        )}
         <div className="ibom-body">
           <div className="ibom-bom">
             {error && <p className="c-crit p-4 text-sm">{error}</p>}
@@ -264,6 +267,14 @@ export function IBomViewer({
             <div className="ibom-hint c-faint">scroll to zoom · drag to pan</div>
           </div>
         </div>
+    </>
+  )
+
+  if (inline) return <div className="viewer ibom-viewer inline">{body}</div>
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="viewer ibom-viewer" onClick={(e) => e.stopPropagation()}>
+        {body}
       </div>
     </div>
   )

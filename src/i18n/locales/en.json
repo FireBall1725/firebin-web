@@ -1,0 +1,22 @@
+{
+  "common": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "close": "Close",
+    "create": "Create",
+    "delete": "Delete",
+    "edit": "Edit",
+    "remove": "Remove",
+    "save": "Save",
+    "upload": "Upload"
+  },
+  "nav": {
+    "apiTokens": "API Tokens",
+    "dashboard": "Dashboard",
+    "locations": "Locations",
+    "parts": "Parts",
+    "projects": "Projects",
+    "scanIntake": "Scan intake",
+    "settings": "Settings"
+  }
+}

@@ -10,6 +10,8 @@ import { TokensPage } from './pages/TokensPage'
 import { PartsPage } from './pages/PartsPage'
 import { PartDetailPage } from './pages/PartDetailPage'
 import { LocationsPage } from './pages/LocationsPage'
+import { ProjectsPage } from './pages/ProjectsPage'
+import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
 
 export function App() {
@@ -22,6 +24,8 @@ export function App() {
           <Route path="parts" element={<PartsPage />} />
           <Route path="parts/:id" element={<PartDetailPage />} />
           <Route path="locations" element={<LocationsPage />} />
+          <Route path="projects" element={<ProjectsPage />} />
+          <Route path="projects/:id" element={<ProjectDetailPage />} />
           <Route path="tokens" element={<TokensPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

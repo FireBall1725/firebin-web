@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, type Project, type Board, type BOMLine } from '../lib/api'
+import { api, type Project, type Board, type BOMLine, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { num } from '../lib/format'
 
@@ -11,10 +11,14 @@ export function ProjectDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const [project, setProject] = useState<Project | null>(null)
+  const [assets, setAssets] = useState<ProjectAsset[]>([])
   const [notFound, setNotFound] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
+  const [viewing, setViewing] = useState<ProjectAsset | null>(null)
 
   const reload = useCallback(() => {
     api.getProject(id).then(setProject).catch(() => setNotFound(true))
+    api.listProjectAssets(id).then(setAssets).catch(() => setAssets([]))
   }, [id])
 
   useEffect(reload, [reload])
@@ -37,6 +41,8 @@ export function ProjectDetailPage() {
   }
 
   const boards = project.boards ?? []
+  const ibom = assets.filter((a) => a.kind === 'ibom')
+  const images = assets.filter((a) => a.kind === 'image')
 
   return (
     <div>
@@ -55,26 +61,59 @@ export function ProjectDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className="pill ghost">{boards.length} {boards.length === 1 ? 'board' : 'boards'}</span>
+          <button onClick={() => setShowUpload(true)} className="btn primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+            Upload
+          </button>
           <button onClick={del} className="btn sm danger">Delete</button>
         </div>
       </div>
 
-      <AddBoard projectID={project.id} onAdded={reload} />
+      {/* Interactive BOM + renders pulled from the uploaded project zip. */}
+      {(ibom.length > 0 || images.length > 0) && (
+        <section className="card mt-5">
+          <div className="card-h"><h2>Renders &amp; files</h2></div>
+          <div className="p-4 space-y-4">
+            {ibom.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {ibom.map((a) => (
+                  <button key={a.id} onClick={() => setViewing(a)} className="btn primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h18v18H3zM3 9h18M9 21V9" /></svg>
+                    Interactive BOM
+                  </button>
+                ))}
+              </div>
+            )}
+            {images.length > 0 && (
+              <div className="asset-grid">
+                {images.map((a) => (
+                  <AssetThumb key={a.id} asset={a} onOpen={() => setViewing(a)} />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
+      {/* Boards + their BOMs. */}
       <div className="mt-4 space-y-4">
         {boards.length === 0 ? (
-          <div className="card"><p className="c-faint p-6 text-sm">No boards yet. Upload a KiCad schematic above to add one.</p></div>
+          <div className="card"><p className="c-faint p-6 text-sm">No boards yet. Use Upload to add one from a KiCad file.</p></div>
         ) : (
           boards.map((b) => <BoardCard key={b.id} board={b} onChanged={reload} />)
         )}
       </div>
+
+      {showUpload && (
+        <UploadModal projectID={project.id} onClose={() => setShowUpload(false)} onDone={reload} />
+      )}
+      {viewing && <AssetViewer asset={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
 
-// AddBoard uploads a KiCad file (schematic or BOM CSV) as a new board, via
-// click-to-pick or drag-and-drop.
-function AddBoard({ projectID, onAdded }: { projectID: string; onAdded: () => void }) {
+// UploadModal wraps the dropzone so an Upload button brings up the upload box.
+function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClose: () => void; onDone: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -86,9 +125,8 @@ function AddBoard({ projectID, onAdded }: { projectID: string; onAdded: () => vo
     setError(null)
     try {
       await api.uploadBoard(projectID, file, name.trim() || undefined)
-      setName('')
-      if (inputRef.current) inputRef.current.value = ''
-      onAdded()
+      onDone()
+      onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
     } finally {
@@ -105,38 +143,107 @@ function AddBoard({ projectID, onAdded }: { projectID: string; onAdded: () => vo
   }
 
   return (
-    <div className="card mt-5">
-      <div className="card-h"><h2>Add a board</h2></div>
-      <div className="p-4">
-        <label className="fieldlabel" style={{ marginBottom: 12 }}>
-          <span>Board name (optional)</span>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Main board — defaults to the filename" />
-        </label>
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-h">
+          <h3>Upload to project</h3>
+          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="modal-b space-y-3">
+          <label className="fieldlabel">
+            <span>Board name (optional)</span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Main board — defaults to the filename" />
+          </label>
+          <label
+            className={`dropzone ${dragging ? 'over' : ''} ${busy ? 'busy' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="26" height="26">
+              <path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+            <div className="dz-title">{busy ? 'Parsing…' : dragging ? 'Drop to upload' : 'Drag a KiCad file here, or click to browse'}</div>
+            <div className="dz-sub">
+              A zipped KiCad project <span className="mono">.zip</span> (best — merges all sheets and pulls in renders/iBOM), a single <span className="mono">.kicad_sch</span>, or a KiCad BOM <span className="mono">.csv</span>.
+            </div>
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".zip,.kicad_sch,.csv,.tsv"
+              hidden
+              disabled={busy}
+              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+            />
+          </label>
+          {error && <p className="c-crit text-sm">{error}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
 
-        <label
-          className={`dropzone ${dragging ? 'over' : ''} ${busy ? 'busy' : ''}`}
-          onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="26" height="26">
-            <path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-          </svg>
-          <div className="dz-title">{busy ? 'Parsing…' : dragging ? 'Drop to upload' : 'Drag a KiCad file here, or click to browse'}</div>
-          <div className="dz-sub">
-            A zipped KiCad project <span className="mono">.zip</span> (best — merges all sheets), a single <span className="mono">.kicad_sch</span>, or a KiCad BOM <span className="mono">.csv</span>. We parse it, group the BOM, and match each line to inventory.
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".zip,.kicad_sch,.csv,.tsv"
-            hidden
-            disabled={busy}
-            onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-          />
-        </label>
+// AssetThumb lazily loads an image asset as an object URL and shows a thumbnail.
+function AssetThumb({ asset, onOpen }: { asset: ProjectAsset; onOpen: () => void }) {
+  const [url, setUrl] = useState<string | null>(null)
 
-        {error && <p className="c-crit text-sm" style={{ marginTop: 8 }}>{error}</p>}
+  useEffect(() => {
+    let revoked = false
+    let objectURL = ''
+    api.assetBlob(asset.id).then((blob) => {
+      if (revoked) return
+      objectURL = URL.createObjectURL(blob)
+      setUrl(objectURL)
+    }).catch(() => undefined)
+    return () => { revoked = true; if (objectURL) URL.revokeObjectURL(objectURL) }
+  }, [asset.id])
+
+  return (
+    <button className="asset-thumb" onClick={onOpen} title={asset.name}>
+      {url ? <img src={url} alt={asset.name} /> : <span className="c-faint" style={{ fontSize: 11 }}>…</span>}
+      <span className="asset-name">{asset.name}</span>
+    </button>
+  )
+}
+
+// AssetViewer renders an asset full-screen: an image, or the iBOM in a sandboxed
+// iframe (it's self-contained HTML+JS).
+function AssetViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let revoked = false
+    let objectURL = ''
+    api.assetBlob(asset.id).then((blob) => {
+      if (revoked) return
+      objectURL = URL.createObjectURL(blob)
+      setUrl(objectURL)
+    }).catch(() => undefined)
+    return () => { revoked = true; if (objectURL) URL.revokeObjectURL(objectURL) }
+  }, [asset.id])
+
+  const isIbom = asset.kind === 'ibom'
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="viewer" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-h">
+          <h3 className="truncate">{isIbom ? 'Interactive BOM' : asset.name}</h3>
+          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="viewer-body">
+          {!url ? (
+            <p className="c-faint" style={{ padding: 24 }}>Loading…</p>
+          ) : isIbom ? (
+            <iframe title={asset.name} src={url} sandbox="allow-scripts allow-popups allow-downloads" />
+          ) : (
+            <img src={url} alt={asset.name} />
+          )}
+        </div>
       </div>
     </div>
   )

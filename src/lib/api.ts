@@ -86,6 +86,17 @@ export interface Board {
   updated_at: string
 }
 
+export interface ProjectAsset {
+  id: string
+  project_id: string
+  board_id?: string
+  name: string
+  kind: 'ibom' | 'image' | 'other'
+  mime: string
+  size: number
+  created_at: string
+}
+
 export type MatchKind = 'mpn' | 'value_footprint' | 'none'
 
 export interface BOMLine {
@@ -369,6 +380,20 @@ async function tryRefresh(): Promise<boolean> {
   return refreshing
 }
 
+// requestBlob fetches raw bytes (asset content) with auth + refresh, for
+// rendering via object URLs (auth headers can't ride on an <img>/<iframe> src).
+async function requestBlob(path: string, retry = true): Promise<Blob> {
+  const headers = new Headers()
+  const access = tokenStore.access
+  if (access) headers.set('Authorization', `Bearer ${access}`)
+  const res = await fetch(`${BASE}${path}`, { headers, cache: 'no-store' })
+  if (res.status === 401 && retry && tokenStore.refresh) {
+    if (await tryRefresh()) return requestBlob(path, false)
+  }
+  if (!res.ok) return parseError(res)
+  return res.blob()
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -482,6 +507,15 @@ export const api = {
   },
   deleteBoard(id: string) {
     return request<{ status: string }>(`/boards/${id}`, { method: 'DELETE' })
+  },
+  listProjectAssets(projectID: string) {
+    return request<ProjectAsset[]>(`/projects/${projectID}/assets`)
+  },
+  assetBlob(id: string) {
+    return requestBlob(`/assets/${id}`)
+  },
+  deleteAsset(id: string) {
+    return request<{ status: string }>(`/assets/${id}`, { method: 'DELETE' })
   },
 
   // ── Parts ───────────────────────────────────────────────────────────────────

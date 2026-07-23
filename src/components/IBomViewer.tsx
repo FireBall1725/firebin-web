@@ -16,9 +16,10 @@ interface Pcb {
   metadata?: { title?: string }
 }
 type Drawing = Record<string, unknown>
+type Side = 'F' | 'B'
 interface Footprint {
   ref: string
-  layer: 'F' | 'B'
+  layer: Side
   bbox: { pos: [number, number]; size: [number, number]; angle: number }
   pads?: Pad[]
 }
@@ -31,10 +32,10 @@ interface Pad {
   type: string
   drillshape?: string
   drillsize?: [number, number]
-  offset?: [number, number]
-  polygons?: number[][][]
   layers?: string[]
+  polygons?: number[][][]
 }
+interface View { scale: number; ox: number; oy: number }
 
 function parseIbom(html: string): Pcb | null {
   try {
@@ -61,10 +62,17 @@ function parseIbom(html: string): Pcb | null {
 const DPR = () => Math.min(window.devicePixelRatio || 1, 2)
 const placedKey = (boardID: string) => `firebin.placed.${boardID}`
 
-// IBomViewer renders the interactive BOM natively: FireBin's BOM table (with
-// inventory links + a placed checkbox) beside a canvas board render — board
-// outline, silkscreen, and pads. Selecting a row highlights that part; checking
-// "placed" dims it on the board and persists per board.
+function fitView(bb: Pcb['edges_bbox'], cssW: number, cssH: number): View {
+  const bw = Math.max(1e-6, bb.maxx - bb.minx)
+  const bh = Math.max(1e-6, bb.maxy - bb.miny)
+  const pad = 24
+  const scale = Math.min((cssW - pad * 2) / bw, (cssH - pad * 2) / bh)
+  return { scale, ox: (cssW - bw * scale) / 2 - bb.minx * scale, oy: (cssH - bh * scale) / 2 - bb.miny * scale }
+}
+
+// IBomViewer renders the interactive BOM natively: FireBin's BOM table beside a
+// canvas board render (outline, silkscreen, pads) with a front/back toggle,
+// pan/zoom, per-row highlight, and a persisted "placed" checkbox.
 export function IBomViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => void }) {
   const boardID = asset.board_id ?? ''
   const [pcb, setPcb] = useState<Pcb | null>(null)
@@ -72,8 +80,14 @@ export function IBomViewer({ asset, onClose }: { asset: ProjectAsset; onClose: (
   const [error, setError] = useState<string | null>(null)
   const [selId, setSelId] = useState<string | null>(null)
   const [placed, setPlaced] = useState<Set<string>>(new Set())
+  const [side, setSide] = useState<Side>('F')
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<View | null>(null)
+  const pcbRef = useRef<Pcb | null>(null)
+  const byRefRef = useRef<Map<string, Footprint>>(new Map())
+  const paramsRef = useRef<{ selected: Set<string>; placed: Set<string>; side: Side }>({ selected: new Set(), placed: new Set(), side: 'F' })
 
   useEffect(() => {
     api
@@ -88,7 +102,6 @@ export function IBomViewer({ asset, onClose }: { asset: ProjectAsset; onClose: (
     if (boardID) api.getBoard(boardID).then((b) => setLines(b.lines ?? [])).catch(() => undefined)
   }, [asset.id, boardID])
 
-  // Load persisted "placed" checkmarks for this board.
   useEffect(() => {
     if (!boardID) return
     try {
@@ -102,13 +115,12 @@ export function IBomViewer({ asset, onClose }: { asset: ProjectAsset; onClose: (
   const togglePlaced = useCallback((lineID: string) => {
     setPlaced((prev) => {
       const next = new Set(prev)
-      if (next.has(lineID)) next.delete(lineID)
-      else next.add(lineID)
+      next.has(lineID) ? next.delete(lineID) : next.add(lineID)
       if (boardID) {
         try {
           localStorage.setItem(placedKey(boardID), JSON.stringify([...next]))
         } catch {
-          // storage full/unavailable — checkmarks just won't persist
+          // storage unavailable
         }
       }
       return next
@@ -123,7 +135,6 @@ export function IBomViewer({ asset, onClose }: { asset: ProjectAsset; onClose: (
 
   const refsOf = (line: BOMLine | undefined) =>
     new Set((line?.refs ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean))
-
   const selectedRefs = useMemo(() => refsOf(lines.find((l) => l.id === selId)), [lines, selId])
   const placedRefs = useMemo(() => {
     const s = new Set<string>()
@@ -131,26 +142,108 @@ export function IBomViewer({ asset, onClose }: { asset: ProjectAsset; onClose: (
     return s
   }, [lines, placed])
 
-  useEffect(() => {
+  // Stable draw fn reads refs so pan/zoom handlers never capture stale state.
+  const redraw = useCallback(() => {
     const canvas = canvasRef.current
     const wrap = wrapRef.current
-    if (!canvas || !wrap || !pcb) return
-    const draw = () => {
-      const cssW = wrap.clientWidth
-      const cssH = wrap.clientHeight
-      const dpr = DPR()
+    const p = pcbRef.current
+    const view = viewRef.current
+    if (!canvas || !wrap || !p || !view) return
+    const cssW = wrap.clientWidth
+    const cssH = wrap.clientHeight
+    const dpr = DPR()
+    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
       canvas.width = cssW * dpr
       canvas.height = cssH * dpr
       canvas.style.width = `${cssW}px`
       canvas.style.height = `${cssH}px`
-      const ctx = canvas.getContext('2d')
-      if (ctx) drawBoard(ctx, pcb, byRef, selectedRefs, placedRefs, cssW, cssH, dpr)
     }
-    draw()
-    const ro = new ResizeObserver(draw)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const { selected, placed: pl, side: sd } = paramsRef.current
+    drawBoard(ctx, p, byRefRef.current, selected, pl, sd, view, cssW, cssH, dpr)
+  }, [])
+
+  // Keep refs in sync + redraw when the render inputs change.
+  useEffect(() => {
+    pcbRef.current = pcb
+    byRefRef.current = byRef
+  }, [pcb, byRef])
+  useEffect(() => {
+    paramsRef.current = { selected: selectedRefs, placed: placedRefs, side }
+    redraw()
+  }, [selectedRefs, placedRefs, side, redraw])
+
+  const fit = useCallback(() => {
+    const wrap = wrapRef.current
+    const p = pcbRef.current
+    if (!wrap || !p) return
+    viewRef.current = fitView(p.edges_bbox, wrap.clientWidth, wrap.clientHeight)
+    redraw()
+  }, [redraw])
+
+  // Set up fit, resize, and pan/zoom once the board data is present.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const wrap = wrapRef.current
+    if (!canvas || !wrap || !pcb) return
+    if (!viewRef.current) viewRef.current = fitView(pcb.edges_bbox, wrap.clientWidth, wrap.clientHeight)
+    redraw()
+
+    const ro = new ResizeObserver(() => redraw())
     ro.observe(wrap)
-    return () => ro.disconnect()
-  }, [pcb, byRef, selectedRefs, placedRefs])
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const v = viewRef.current
+      if (!v) return
+      const rect = canvas.getBoundingClientRect()
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+      v.ox = mx - (mx - v.ox) * factor
+      v.oy = my - (my - v.oy) * factor
+      v.scale *= factor
+      redraw()
+    }
+    let dragging = false
+    let lastX = 0
+    let lastY = 0
+    const onDown = (e: PointerEvent) => {
+      dragging = true
+      lastX = e.clientX
+      lastY = e.clientY
+      canvas.setPointerCapture(e.pointerId)
+      canvas.style.cursor = 'grabbing'
+    }
+    const onMove = (e: PointerEvent) => {
+      if (!dragging) return
+      const v = viewRef.current
+      if (!v) return
+      v.ox += e.clientX - lastX
+      v.oy += e.clientY - lastY
+      lastX = e.clientX
+      lastY = e.clientY
+      redraw()
+    }
+    const onUp = (e: PointerEvent) => {
+      dragging = false
+      canvas.releasePointerCapture?.(e.pointerId)
+      canvas.style.cursor = 'grab'
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    canvas.addEventListener('pointerdown', onDown)
+    canvas.addEventListener('pointermove', onMove)
+    canvas.addEventListener('pointerup', onUp)
+    canvas.style.cursor = 'grab'
+    return () => {
+      ro.disconnect()
+      canvas.removeEventListener('wheel', onWheel)
+      canvas.removeEventListener('pointerdown', onDown)
+      canvas.removeEventListener('pointermove', onMove)
+      canvas.removeEventListener('pointerup', onUp)
+    }
+  }, [pcb, redraw])
 
   const placedCount = lines.filter((l) => placed.has(l.id)).length
 
@@ -210,6 +303,14 @@ export function IBomViewer({ asset, onClose }: { asset: ProjectAsset; onClose: (
           <div className="ibom-canvas" ref={wrapRef}>
             {!pcb && !error && <p className="c-faint" style={{ padding: 24 }}>Rendering board…</p>}
             <canvas ref={canvasRef} />
+            <div className="ibom-tools">
+              <div className="seg">
+                <button className={`seg-btn ${side === 'F' ? 'on' : ''}`} onClick={() => setSide('F')}>Front</button>
+                <button className={`seg-btn ${side === 'B' ? 'on' : ''}`} onClick={() => setSide('B')}>Back</button>
+              </div>
+              <button className="btn sm" onClick={fit} title="Fit to view">Fit</button>
+            </div>
+            <div className="ibom-hint c-faint">scroll to zoom · drag to pan</div>
           </div>
         </div>
       </div>
@@ -225,50 +326,52 @@ function drawBoard(
   byRef: Map<string, Footprint>,
   selected: Set<string>,
   placed: Set<string>,
+  side: Side,
+  view: View,
   cssW: number,
   cssH: number,
   dpr: number,
 ) {
   const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#f5a524').trim()
   const silkColor = 'rgba(214,218,226,0.72)'
-  const padColor = '#b58e4c'
+  const padColor = side === 'B' ? '#9a7d47' : '#b58e4c'
   const holeColor = '#0b0e13'
   const edgeColor = '#6b7280'
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, cssW, cssH)
 
-  const bb = pcb.edges_bbox
-  const bw = Math.max(1e-6, bb.maxx - bb.minx)
-  const bh = Math.max(1e-6, bb.maxy - bb.miny)
-  const pad = 18
-  const scale = Math.min((cssW - pad * 2) / bw, (cssH - pad * 2) / bh)
-  const ox = (cssW - bw * scale) / 2 - bb.minx * scale
-  const oy = (cssH - bh * scale) / 2 - bb.miny * scale
-
-  // Work in board millimetres; line widths are then in mm too.
   ctx.save()
-  ctx.translate(ox, oy)
-  ctx.scale(scale, scale)
+  ctx.translate(view.ox, view.oy)
+  ctx.scale(view.scale, view.scale)
+  // Back side: mirror horizontally around the board centre so it reads correctly.
+  if (side === 'B') {
+    const cx = (pcb.edges_bbox.minx + pcb.edges_bbox.maxx) / 2
+    ctx.translate(cx, 0)
+    ctx.scale(-1, 1)
+    ctx.translate(-cx, 0)
+  }
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
-  // Board outline.
+  // Board outline (both sides).
   ctx.strokeStyle = edgeColor
   ctx.lineWidth = 0.15
   for (const e of pcb.edges) strokeDrawing(ctx, e)
 
-  // Silkscreen (front).
+  // Silkscreen for this side.
   ctx.strokeStyle = silkColor
   ctx.fillStyle = silkColor
-  for (const s of pcb.drawings?.silkscreen?.F ?? []) drawSilk(ctx, s)
+  for (const s of pcb.drawings?.silkscreen?.[side] ?? []) drawSilk(ctx, s)
 
-  // Pads in two passes (placed footprints dimmed): all copper first, then all
-  // drill holes — otherwise a pad drawn later paints over an earlier pad's hole.
+  const onSide = (p: Pad) => !p.layers || p.layers.includes(side)
+
+  // Pads in two passes (all copper, then all drills) so no pad's copper covers
+  // another's hole. Only pads on the visible side (through-hole pads are both).
   for (const f of pcb.footprints) {
     ctx.globalAlpha = placed.has(f.ref.toUpperCase()) ? 0.22 : 1
     ctx.fillStyle = padColor
-    for (const p of f.pads ?? []) fillPadCopper(ctx, p)
+    for (const p of f.pads ?? []) if (onSide(p)) fillPadCopper(ctx, p)
   }
   for (const f of pcb.footprints) {
     ctx.globalAlpha = placed.has(f.ref.toUpperCase()) ? 0.22 : 1
@@ -279,7 +382,7 @@ function drawBoard(
 
   // Highlight selected footprints (bounding box).
   ctx.strokeStyle = accent
-  ctx.lineWidth = 2 / scale
+  ctx.lineWidth = 2 / view.scale
   for (const ref of selected) {
     const f = byRef.get(ref)
     if (!f) continue
@@ -298,7 +401,6 @@ function drawBoard(
   ctx.restore()
 }
 
-// strokeDrawing renders an outline drawing (board edge or silk stroke).
 function strokeDrawing(ctx: CanvasRenderingContext2D, d: Drawing) {
   const t = d.type as string | undefined
   if (t === 'segment' && d.start && d.end) {
@@ -322,12 +424,9 @@ function strokeDrawing(ctx: CanvasRenderingContext2D, d: Drawing) {
   }
 }
 
-// drawSilk renders a silkscreen item: strokes, filled polygons, and text (which
-// iBOM stores as an SVG path).
 function drawSilk(ctx: CanvasRenderingContext2D, d: Drawing) {
   const t = d.type as string | undefined
   if (typeof d.svgpath === 'string') {
-    // Text / curved graphics as an SVG path stroke.
     ctx.lineWidth = (d.thickness as number) || 0.1
     ctx.stroke(new Path2D(d.svgpath))
     return
@@ -351,7 +450,6 @@ function drawSilk(ctx: CanvasRenderingContext2D, d: Drawing) {
   strokeDrawing(ctx, d)
 }
 
-// fillPadCopper fills a pad's copper shape (fillStyle set by the caller).
 function fillPadCopper(ctx: CanvasRenderingContext2D, p: Pad) {
   const [w, h] = p.size
   ctx.save()
@@ -362,7 +460,6 @@ function fillPadCopper(ctx: CanvasRenderingContext2D, p: Pad) {
   ctx.restore()
 }
 
-// punchPadHole clears a through-hole pad's drill (fillStyle set by the caller).
 function punchPadHole(ctx: CanvasRenderingContext2D, p: Pad) {
   const d = p.drillsize as [number, number]
   ctx.save()

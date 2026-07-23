@@ -16,6 +16,7 @@ export function ProjectDetailPage() {
   const [notFound, setNotFound] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [showNewBoard, setShowNewBoard] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
 
   const reload = useCallback(() => {
     api.getProject(id).then(setProject).catch(() => setNotFound(true))
@@ -59,9 +60,18 @@ export function ProjectDetailPage() {
           <h1 className="c-text" style={{ fontSize: 24, fontWeight: 650, letterSpacing: '-0.02em', margin: '4px 0 6px' }}>
             {project.name}
           </h1>
-          {project.description && <p className="c-dim" style={{ fontSize: 13.5, margin: 0 }}>{project.description}</p>}
+          {project.description && <p className="c-dim" style={{ fontSize: 13.5, margin: '0 0 6px' }}>{project.description}</p>}
+          {project.tags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {project.tags.map((t) => <span key={t} className="pill ghost" style={{ fontSize: 11 }}>{t}</span>)}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowEdit(true)} className="btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+            Edit
+          </button>
           <button onClick={() => setShowNewBoard(true)} className="btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
             New board
@@ -70,7 +80,7 @@ export function ProjectDetailPage() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
             Upload
           </button>
-          <button onClick={del} className="btn sm danger">Delete</button>
+          <button onClick={del} className="btn danger">Delete</button>
         </div>
       </div>
 
@@ -111,6 +121,65 @@ export function ProjectDetailPage() {
           onCreated={(id) => navigate(`/projects/${project.id}/boards/${id}`)}
         />
       )}
+      {showEdit && (
+        <EditProjectModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); reload() }} />
+      )}
+    </div>
+  )
+}
+
+// EditProjectModal edits a project's name, description, and tags.
+function EditProjectModal({ project, onClose, onSaved }: { project: Project; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(project.name)
+  const [description, setDescription] = useState(project.description ?? '')
+  const [tags, setTags] = useState(project.tags.join(', '))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = async () => {
+    if (!name.trim()) { setError('Name is required'); return }
+    setBusy(true)
+    setError(null)
+    try {
+      await api.updateProject(project.id, {
+        name: name.trim(),
+        description: description.trim(),
+        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+      })
+      onSaved()
+    } catch {
+      setError('Could not save the project')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-h">
+          <h3>Edit project</h3>
+          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="modal-b space-y-3">
+          <label className="fieldlabel"><span>Name</span>
+            <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="fieldlabel"><span>Description</span>
+            <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+          </label>
+          <label className="fieldlabel"><span>Tags <span className="c-faint">(comma-separated)</span></span>
+            <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="e.g. wip, client-x, revB" />
+          </label>
+          {error && <p className="c-crit text-sm">{error}</p>}
+        </div>
+        <div className="modal-f">
+          <button onClick={onClose} className="btn">Cancel</button>
+          <button onClick={save} disabled={busy || !name.trim()} className="btn primary">{busy ? '…' : 'Save'}</button>
+        </div>
+      </div>
     </div>
   )
 }

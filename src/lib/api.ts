@@ -66,6 +66,7 @@ export interface Project {
   id: string
   name: string
   description?: string
+  tags: string[]
   boards?: Board[]
   board_count: number
   created_at: string
@@ -571,7 +572,7 @@ export const api = {
   getProject(id: string) {
     return request<Project>(`/projects/${id}`)
   },
-  updateProject(id: string, body: { name: string; description?: string }) {
+  updateProject(id: string, body: { name: string; description?: string; tags?: string[] }) {
     return request<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
   },
   deleteProject(id: string) {
@@ -621,7 +622,7 @@ export const api = {
     form.append('file', file)
     return request<ProjectAsset>(`/boards/${boardID}/assets`, { method: 'POST', body: form })
   },
-  updateBoard(id: string, body: { name?: string; copies?: number }) {
+  updateBoard(id: string, body: { name?: string; revision?: string; copies?: number }) {
     return request<Board>(`/boards/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
   },
   deleteBoard(id: string) {

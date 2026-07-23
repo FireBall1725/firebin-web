@@ -103,6 +103,7 @@ export function BoardDetailPage() {
           matched={matched}
           totalParts={totalParts}
           onChanged={reloadAssets}
+          onBoardChanged={reload}
         />
       )}
       {tab === 'bom' && <BomTab board={board} copies={copies} onChanged={reload} />}
@@ -113,7 +114,7 @@ export function BoardDetailPage() {
 }
 
 function InfoTab({
-  board, boardID, layoutAsset, ibomAsset, images, matched, totalParts, onChanged,
+  board, boardID, layoutAsset, ibomAsset, images, matched, totalParts, onChanged, onBoardChanged,
 }: {
   board: Board
   boardID: string
@@ -123,9 +124,11 @@ function InfoTab({
   matched: number
   totalParts: number
   onChanged: () => void
+  onBoardChanged: () => void
 }) {
   const lines = board.lines ?? []
   const [big, setBig] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [viewImage, setViewImage] = useState<ProjectAsset | null>(null)
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0, 320px) 1fr' }}>
@@ -164,7 +167,13 @@ function InfoTab({
         </div>
       )}
       <div className="card">
-        <div className="card-h"><h2>Details</h2></div>
+        <div className="card-h">
+          <h2>Details</h2>
+          <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => setEditing(true)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+            Edit
+          </button>
+        </div>
         <table className="tbl">
           <tbody>
             <Row k="Type" v={board.kind === 'panel' ? `Panel (${board.copies}-up)` : 'Board'} />
@@ -176,11 +185,73 @@ function InfoTab({
           </tbody>
         </table>
       </div>
+      {editing && <EditBoardModal board={board} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onBoardChanged() }} />}
 
       <div style={{ gridColumn: '1 / -1' }}>
         <FilesCard boardID={boardID} ibom={ibomAsset} images={images} onChanged={onChanged} onView={setViewImage} />
       </div>
       {viewImage && <ImageViewer asset={viewImage} onClose={() => setViewImage(null)} />}
+    </div>
+  )
+}
+
+// EditBoardModal edits a board's name, revision, and (for panels) copy count.
+function EditBoardModal({ board, onClose, onSaved }: { board: Board; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(board.name)
+  const [revision, setRevision] = useState(board.revision ?? '')
+  const [copies, setCopies] = useState(String(board.copies || 1))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isPanel = board.kind === 'panel'
+
+  const save = async () => {
+    if (!name.trim()) { setError('Name is required'); return }
+    setBusy(true)
+    setError(null)
+    try {
+      await api.updateBoard(board.id, {
+        name: name.trim(),
+        revision: revision.trim(),
+        copies: isPanel ? Math.max(1, parseInt(copies, 10) || 1) : undefined,
+      })
+      onSaved()
+    } catch {
+      setError('Could not save the board')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-h">
+          <h3>Edit board</h3>
+          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="modal-b space-y-3">
+          <label className="fieldlabel"><span>Name</span>
+            <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+          </label>
+          <div className={isPanel ? 'grid grid-cols-2 gap-3' : ''}>
+            <label className="fieldlabel"><span>Revision</span>
+              <input className="input" value={revision} onChange={(e) => setRevision(e.target.value)} placeholder="A" />
+            </label>
+            {isPanel && (
+              <label className="fieldlabel"><span>Copies (N-up)</span>
+                <input type="number" min={1} className="input" value={copies} onChange={(e) => setCopies(e.target.value)} />
+              </label>
+            )}
+          </div>
+          {error && <p className="c-crit text-sm">{error}</p>}
+        </div>
+        <div className="modal-f">
+          <button onClick={onClose} className="btn">Cancel</button>
+          <button onClick={save} disabled={busy || !name.trim()} className="btn primary">{busy ? '…' : 'Save'}</button>
+        </div>
+      </div>
     </div>
   )
 }

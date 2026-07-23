@@ -380,12 +380,16 @@ function drawBoard(
   }
   ctx.globalAlpha = 1
 
-  // Highlight selected footprints (bounding box).
+  // Highlight selected footprints (bounding box) — only ones actually on this
+  // side, so a front SMD part isn't drawn onto the back view.
   ctx.strokeStyle = accent
   ctx.lineWidth = 2 / view.scale
   for (const ref of selected) {
     const f = byRef.get(ref)
     if (!f) continue
+    const pads = f.pads ?? []
+    const visible = pads.length ? pads.some(onSide) : f.layer === side
+    if (!visible) continue
     const { pos, size, angle } = f.bbox
     ctx.save()
     ctx.translate(pos[0], pos[1])

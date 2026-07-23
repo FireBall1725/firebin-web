@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { api, type Board, type BOMLine, type Project, type ProjectAsset } from '../lib/api'
+import { api, type Board, type BOMLine, type BOMLineInput, type Project, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { num } from '../lib/format'
 import { IBomViewer } from '../components/IBomViewer'
@@ -191,9 +191,14 @@ function BomTab({ board, copies, onChanged }: { board: Board; copies: number; on
               <td className="mono c-faint" style={{ fontSize: 11.5 }}><span className="cell-trunc" style={{ maxWidth: 150 }} title={l.mpn}>{l.mpn || '—'}</span></td>
               <td>
                 {l.part_id ? (
-                  <Link to={`/parts/${l.part_id}`} className="pill ok" style={{ whiteSpace: 'nowrap' }}>{l.part_name} ↗</Link>
+                  <span className="flex items-center gap-1" style={{ whiteSpace: 'nowrap' }}>
+                    <Link to={`/parts/${l.part_id}`} className="pill ok">{l.part_name} ↗</Link>
+                    <span className="c-faint" style={{ fontSize: 10 }} title={`matched by ${matchLabel(l.match_kind)}`}>{matchLabel(l.match_kind)}</span>
+                  </span>
                 ) : (
-                  <span className="pill low" style={{ whiteSpace: 'nowrap' }}>no match</span>
+                  <button className="pill low" style={{ whiteSpace: 'nowrap', cursor: 'pointer', border: 'none' }} onClick={() => setEditing(l)} title="Pick a part">
+                    no match · pick
+                  </button>
                 )}
               </td>
               <td className="col-actions">
@@ -231,20 +236,30 @@ function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line:
   const [footprint, setFootprint] = useState(line?.footprint ?? '')
   const [mpn, setMpn] = useState(line?.mpn ?? '')
   const [manufacturer, setManufacturer] = useState(line?.manufacturer ?? '')
+  const [supplierSku, setSupplierSku] = useState(line?.supplier_sku ?? '')
+  const [ipn, setIpn] = useState(line?.ipn ?? '')
+  // Inventory match: null = auto-resolve; otherwise pinned to this part.
+  const [pinned, setPinned] = useState<{ id: string; name: string } | null>(
+    line && line.match_kind === 'manual' && line.part_id ? { id: line.part_id, name: line.part_name ?? 'part' } : null,
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const save = async () => {
     setBusy(true)
     setError(null)
-    const body = {
+    const body: BOMLineInput = {
       refs: refs.trim(),
       quantity: parseInt(quantity, 10) || 1,
       value: value.trim(),
       footprint: footprint.trim(),
       mpn: mpn.trim(),
       manufacturer: manufacturer.trim(),
+      supplier_sku: supplierSku.trim(),
+      ipn: ipn.trim(),
     }
+    // Pinned → manual match; otherwise leave part_id off so the server re-resolves.
+    if (pinned) body.part_id = pinned.id
     try {
       if (line) await api.updateBOMLine(line.id, body)
       else await api.addBOMLine(boardID, body)
@@ -290,7 +305,35 @@ function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line:
               <input className="input" value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} placeholder="e.g. Yageo" />
             </label>
           </div>
-          <p className="c-faint" style={{ fontSize: 12 }}>Matched to inventory automatically by MPN, then value + footprint.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="fieldlabel"><span>Supplier SKU</span>
+              <input className="input mono" value={supplierSku} onChange={(e) => setSupplierSku(e.target.value)} placeholder="LCSC / Digi-Key…" />
+            </label>
+            <label className="fieldlabel"><span>FireBin PN</span>
+              <input className="input mono" value={ipn} onChange={(e) => setIpn(e.target.value)} placeholder="FB-…" />
+            </label>
+          </div>
+
+          <div>
+            <span className="eyebrow">Inventory match</span>
+            {pinned ? (
+              <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+                <span className="pill ok">{pinned.name}</span>
+                <span className="c-faint" style={{ fontSize: 12 }}>pinned manually</span>
+                <button type="button" className="link" style={{ fontSize: 12, marginLeft: 'auto' }} onClick={() => setPinned(null)}>
+                  use auto-match
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="c-faint" style={{ fontSize: 12, marginTop: 4 }}>
+                  Auto: FireBin PN → MPN → supplier SKU → value + footprint. Or pin a specific part:
+                </p>
+                <PartPicker onPick={(p) => setPinned(p)} />
+              </>
+            )}
+          </div>
+
           {error && <p className="c-crit text-sm">{error}</p>}
         </div>
         <div className="modal-f">
@@ -302,8 +345,76 @@ function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line:
   )
 }
 
+// PartPicker is a small search-and-select used to pin a BOM line to a specific
+// inventory part (a manual substitution / override).
+function PartPicker({ onPick }: { onPick: (p: { id: string; name: string }) => void }) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<{ id: string; name: string }[]>([])
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const s = q.trim()
+    if (!s) { setResults([]); return }
+    let live = true
+    const t = setTimeout(() => {
+      api.listParts({ search: s, topLevel: false })
+        .then((ps) => { if (live) { setResults(ps.slice(0, 8).map((p) => ({ id: p.id, name: p.name }))); setOpen(true) } })
+        .catch(() => { if (live) setResults([]) })
+    }, 200)
+    return () => { live = false; clearTimeout(t) }
+  }, [q])
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <input
+        className="input"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onFocus={() => results.length && setOpen(true)}
+        placeholder="Search inventory…"
+      />
+      {open && results.length > 0 && (
+        <div
+          style={{
+            marginTop: 4, border: '1px solid var(--border)', borderRadius: 8,
+            overflow: 'hidden', maxHeight: 180, overflowY: 'auto',
+          }}
+        >
+          {results.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => { onPick(p); setOpen(false); setQ('') }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
+                background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 13, cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function shortFootprint(fp: string): string {
   if (!fp) return '—'
   const i = fp.indexOf(':')
   return i >= 0 ? fp.slice(i + 1) : fp
+}
+
+// matchLabel names how a BOM line resolved to inventory (shown beside the pill).
+function matchLabel(kind: BOMLine['match_kind']): string {
+  switch (kind) {
+    case 'fbpn': return 'FireBin PN'
+    case 'mpn': return 'MPN'
+    case 'supplier': return 'supplier SKU'
+    case 'value_footprint': return 'value + footprint'
+    case 'manual': return 'manual'
+    default: return ''
+  }
 }

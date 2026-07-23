@@ -23,6 +23,7 @@ export interface PartDraft {
   name?: string
   category?: string
   package?: string
+  ipn?: string
   description?: string
   variant_of?: string
   is_template?: boolean
@@ -62,6 +63,7 @@ export function PartForm({
   const [name, setName] = useState(initial?.name ?? '')
   const [category, setCategory] = useState(initial?.category ?? '')
   const [pkg, setPkg] = useState(initial?.package ?? '')
+  const [ipn, setIpn] = useState(initial?.ipn ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [isTemplate, setIsTemplate] = useState(initial?.is_template ?? false)
   const [minimum, setMinimum] = useState(String(initial?.minimum_stock ?? 0))
@@ -119,6 +121,7 @@ export function PartForm({
         name: name.trim(),
         category_id: categoryID,
         variant_of: initial?.variant_of ?? null,
+        ipn: ipn.trim() || null,
         package: pkg || null,
         description: description || null,
         is_template: isTemplate,
@@ -195,6 +198,17 @@ export function PartForm({
             <input className="input" value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="0603" />
           </L>
         </div>
+
+        {!isTemplate && (
+          <L label="FireBin PN (your internal part number, used first when matching a BOM)">
+            <input
+              className="input mono"
+              value={ipn}
+              onChange={(e) => setIpn(e.target.value)}
+              placeholder="e.g. FB-R-0603-1K"
+            />
+          </L>
+        )}
 
         <L label="Description">
           <input

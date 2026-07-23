@@ -77,6 +77,7 @@ export function PartDetailPage() {
             {part.name}
           </h1>
           <div className="flex flex-wrap items-center gap-2">
+            {part.ipn && <span className="tag mono" title="FireBin part number">{part.ipn}</span>}
             {part.package && <span className="tag">{part.package}</span>}
             {isTemplate && (
               <span className="pill accent">

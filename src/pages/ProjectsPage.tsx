@@ -5,8 +5,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, type Project } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
+import { ProjectFormModal } from '../components/ProjectFormModal'
 
 export function ProjectsPage() {
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [showNew, setShowNew] = useState(false)
 
@@ -49,71 +51,21 @@ export function ProjectsPage() {
               {p.description && (
                 <p className="c-dim" style={{ fontSize: 12.5, margin: '0 0 10px', lineHeight: 1.4 }}>{p.description}</p>
               )}
-              <span className="pill ghost">{p.board_count} {p.board_count === 1 ? 'board' : 'boards'}</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="pill ghost">{p.board_count} {p.board_count === 1 ? 'board' : 'boards'}</span>
+                {p.tags.map((t) => <span key={t} className="pill ghost" style={{ fontSize: 11 }}>{t}</span>)}
+              </div>
             </Link>
           ))}
         </div>
       )}
 
       {showNew && (
-        <NewProjectModal
+        <ProjectFormModal
           onClose={() => setShowNew(false)}
-          onCreated={() => setShowNew(false)}
+          onSaved={(p) => { setShowNew(false); navigate(`/projects/${p.id}`) }}
         />
       )}
-    </div>
-  )
-}
-
-function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
-  const navigate = useNavigate()
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const save = async () => {
-    if (!name.trim()) {
-      setError('Name is required')
-      return
-    }
-    setBusy(true)
-    try {
-      const p = await api.createProject({ name: name.trim(), description: description.trim() || undefined })
-      onCreated(p.id)
-      navigate(`/projects/${p.id}`)
-    } catch {
-      setError('Could not create project')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-h">
-          <h3>New project</h3>
-          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="modal-b space-y-3">
-          <label className="fieldlabel">
-            <span>Name</span>
-            <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="e.g. Weather Display" />
-          </label>
-          <label className="fieldlabel">
-            <span>Description (optional)</span>
-            <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is it?" />
-          </label>
-          {error && <p className="c-crit text-sm">{error}</p>}
-        </div>
-        <div className="modal-f">
-          <button onClick={onClose} className="btn">Cancel</button>
-          <button onClick={save} disabled={busy} className="btn primary">{busy ? '…' : 'Create'}</button>
-        </div>
-      </div>
     </div>
   )
 }

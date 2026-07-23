@@ -642,9 +642,12 @@ function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line:
   const [manufacturer, setManufacturer] = useState(line?.manufacturer ?? '')
   const [supplierSku, setSupplierSku] = useState(line?.supplier_sku ?? '')
   const [ipn, setIpn] = useState(line?.ipn ?? '')
-  // Inventory match: null = auto-resolve; otherwise pinned to this part.
+  // Inventory match: null = auto-resolve; otherwise pinned to this part (a
+  // project match rule, or a per-line manual pin).
   const [pinned, setPinned] = useState<{ id: string; name: string } | null>(
-    line && line.match_kind === 'manual' && line.part_id ? { id: line.part_id, name: line.part_name ?? 'part' } : null,
+    line && (line.match_kind === 'project' || line.match_kind === 'manual') && line.part_id
+      ? { id: line.part_id, name: line.part_name ?? 'part' }
+      : null,
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -723,7 +726,7 @@ function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line:
             {pinned ? (
               <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
                 <span className="pill ok">{pinned.name}</span>
-                <span className="c-faint" style={{ fontSize: 12 }}>pinned manually</span>
+                <span className="c-faint" style={{ fontSize: 12 }}>pinned for this project</span>
                 <button type="button" className="link" style={{ fontSize: 12, marginLeft: 'auto' }} onClick={() => setPinned(null)}>
                   use auto-match
                 </button>
@@ -731,7 +734,7 @@ function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line:
             ) : (
               <>
                 <p className="c-faint" style={{ fontSize: 12, marginTop: 4 }}>
-                  Auto: FireBin PN → MPN → supplier SKU → value + footprint. Or pin a specific part:
+                  Auto: FireBin PN → project rule → MPN → supplier SKU → value + footprint. Pinning a part applies to every board in this project:
                 </p>
                 <PartPicker onPick={(p) => setPinned(p)} />
               </>
@@ -815,6 +818,7 @@ function shortFootprint(fp: string): string {
 function matchLabel(kind: BOMLine['match_kind']): string {
   switch (kind) {
     case 'fbpn': return 'FireBin PN'
+    case 'project': return 'project match'
     case 'mpn': return 'MPN'
     case 'supplier': return 'supplier SKU'
     case 'value_footprint': return 'value + footprint'

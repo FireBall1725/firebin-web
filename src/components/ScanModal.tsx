@@ -5,8 +5,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { readBarcodes, prepareZXingModule, type ReaderOptions } from 'zxing-wasm/reader'
 import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'
-import { api, type ScanResult, type StorageLocation, type EnrichedPart } from '../lib/api'
+import { api, type ScanResult, type StorageLocation, type EnrichedPart, type PriceBreak } from '../lib/api'
 import { num } from '../lib/format'
+
+// Only import supplier SKUs from these major distributors on enrichment — skip
+// the long tail of obscure brokers Octopart lists.
+const MAJOR_DISTRIBUTORS = /digi-?key|mouser|lcsc|arrow|newark|element14|farnell|avnet|\btme\b/i
 
 // Point the WASM loader at the bundled, same-origin wasm (self-hosted / offline
 // safe — no CDN). zxing-cpp reads Data Matrix reliably, unlike the JS port.
@@ -337,11 +341,28 @@ function ScanResultView({
         parameters: enriched?.parameters.map((p) => ({ name: p.name, value: p.value })) ?? [],
       })
       if (parsed.mpn) {
-        await api.createManufacturerPart(part.id, {
+        const mp = await api.createManufacturerPart(part.id, {
           manufacturer: enriched?.manufacturer || '',
           mpn: parsed.mpn,
           datasheet_url: enriched?.datasheet_url || null,
         })
+        // Capture supplier SKUs: the distributor we scanned from (authoritative)
+        // plus the major distributors Octopart lists (with price breaks).
+        const seen = new Set<string>()
+        const addSupplier = async (supplier: string, sku: string, pricing: PriceBreak[]) => {
+          const key = `${supplier.toLowerCase()}|${sku.toLowerCase()}`
+          if (!sku || seen.has(key)) return
+          seen.add(key)
+          await api.createSupplierPart(mp.id, { supplier, sku, pricing }).catch(() => undefined)
+        }
+        if (parsed.distributor && parsed.customer_part) {
+          await addSupplier(parsed.distributor, parsed.customer_part, [])
+        }
+        if (enriched) {
+          for (const s of enriched.suppliers) {
+            if (MAJOR_DISTRIBUTORS.test(s.name)) await addSupplier(s.name, s.sku, s.prices)
+          }
+        }
       }
       const q = parseFloat(qty)
       if (!isNaN(q) && q > 0) {

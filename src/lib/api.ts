@@ -490,7 +490,10 @@ export const api = {
   deleteManufacturerPart(id: string) {
     return request<{ status: string }>(`/manufacturer-parts/${id}`, { method: 'DELETE' })
   },
-  createSupplierPart(mfgPartID: string, body: { supplier_id: string; sku: string; packaging?: string | null; moq?: number | null; url?: string | null; pricing: PriceBreak[] }) {
+  createSupplierPart(
+    mfgPartID: string,
+    body: { supplier_id?: string; supplier?: string; sku: string; packaging?: string | null; moq?: number | null; url?: string | null; pricing: PriceBreak[] },
+  ) {
     return request<{ id: string }>(`/manufacturer-parts/${mfgPartID}/supplier-parts`, { method: 'POST', body: JSON.stringify(body) })
   },
   deleteSupplierPart(id: string) {

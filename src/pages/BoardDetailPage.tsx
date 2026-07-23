@@ -2,7 +2,7 @@
 // Copyright (C) 2026 FireBall1725
 
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api, type Board, type BOMLine, type Project, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { num } from '../lib/format'
@@ -17,7 +17,10 @@ export function BoardDetailPage() {
   const [board, setBoard] = useState<Board | null>(null)
   const [ibom, setIbom] = useState<ProjectAsset | null>(null)
   const [notFound, setNotFound] = useState(false)
-  const [tab, setTab] = useState<Tab>('info')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const raw = searchParams.get('tab')
+  const tab: Tab = raw === 'bom' || raw === 'layout' ? raw : 'info'
+  const setTab = (t: Tab) => setSearchParams(t === 'info' ? {} : { tab: t })
 
   const reload = useCallback(() => {
     api.getBoard(boardId).then(setBoard).catch(() => setNotFound(true))
@@ -153,6 +156,7 @@ function BomTab({ board, copies, onChanged }: { board: Board; copies: number; on
           Add part
         </button>
       </div>
+      <div style={{ overflowX: 'auto' }}>
       <table className="tbl">
         <thead>
           <tr>
@@ -162,7 +166,7 @@ function BomTab({ board, copies, onChanged }: { board: Board; copies: number; on
             <th>Footprint</th>
             <th>MPN</th>
             <th>Inventory</th>
-            <th style={{ width: 70 }}></th>
+            <th className="col-actions" style={{ width: 76 }}></th>
           </tr>
         </thead>
         <tbody>
@@ -186,7 +190,7 @@ function BomTab({ board, copies, onChanged }: { board: Board; copies: number; on
                   <span className="pill low" style={{ whiteSpace: 'nowrap' }}>no match</span>
                 )}
               </td>
-              <td>
+              <td className="col-actions">
                 <div className="flex items-center gap-1 justify-end">
                   <button className="icon-btn sm" title="Edit" onClick={() => setEditing(l)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
@@ -200,6 +204,7 @@ function BomTab({ board, copies, onChanged }: { board: Board; copies: number; on
           ))}
         </tbody>
       </table>
+      </div>
 
       {editing && (
         <LineModal

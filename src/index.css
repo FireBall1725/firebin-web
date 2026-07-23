@@ -234,26 +234,29 @@ body {
 /* Native interactive-BOM viewer: our BOM table beside a canvas board view. */
 .ibom-viewer .ibom-body { flex: 1 1 auto; min-height: 0; display: flex; }
 
-/* Inline (board-layout tab): the BOM table flows at full height with no inner
-   scrollbar; the board viewer sticks alongside it as the page scrolls. */
-.ibom-viewer.inline { max-width: none; height: auto; box-shadow: none; border: 1px solid var(--border); border-radius: 12px; overflow: visible; }
-.ibom-viewer.inline .ibom-body { display: grid; grid-template-columns: minmax(0, 440px) 1fr; align-items: start; }
-.ibom-viewer.inline .ibom-bom { width: auto; overflow: visible; height: auto; }
+/* Inline (board-layout tab): the BOM table and the board viewer are two
+   independent cards side by side, so the viewer never stretches to the table's
+   height. The table flows full-height (no inner scrollbar); the viewer is its
+   own fixed-height card that sticks as the table scrolls. */
+.ibom-viewer.inline { max-width: none; height: auto; box-shadow: none; border: none; border-radius: 0; overflow: visible; background: transparent; }
+.ibom-viewer.inline .ibom-body { display: grid; grid-template-columns: minmax(0, 440px) 1fr; align-items: start; gap: 14px; }
+.ibom-viewer.inline .ibom-bom {
+  width: auto; height: auto; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+}
 .ibom-viewer.inline .ibom-bom .tbl th { position: static; }
-/* The board viewer is its own fixed-height panel (align-self:start keeps it
-   from stretching to the BOM table's height); it sticks as the table scrolls. */
 .ibom-viewer.inline .ibom-canvas {
   align-self: start;
   position: sticky;
   top: 12px;
   height: calc(100vh - 150px);
   min-height: 460px;
-  border-left: 1px solid var(--border);
-  border-radius: 0 12px 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 @media (max-width: 820px) {
   .ibom-viewer.inline .ibom-body { grid-template-columns: 1fr; }
-  .ibom-viewer.inline .ibom-canvas { position: static; height: 60vh; border-left: 0; border-top: 1px solid var(--border); border-radius: 0 0 12px 12px; }
+  .ibom-viewer.inline .ibom-canvas { position: static; height: 60vh; }
 }
 .ibom-bom { width: 420px; flex: none; overflow: auto; border-right: 1px solid var(--border); }
 .ibom-bom .tbl th { position: sticky; top: 0; background: var(--panel-2); z-index: 1; }
@@ -266,8 +269,8 @@ body {
 .ibom-canvas { flex: 1 1 auto; min-width: 0; position: relative; background: #0b0e13; overflow: hidden; }
 .ibom-canvas canvas { display: block; touch-action: none; }
 .ibom-tools { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; align-items: center; }
-.ibom-tools .seg { background: rgba(20, 26, 34, 0.85); backdrop-filter: blur(4px); }
-.ibom-tools .btn { background: rgba(20, 26, 34, 0.85); backdrop-filter: blur(4px); }
+.ibom-tools .seg { background: rgba(20, 26, 34, 0.85); backdrop-filter: blur(4px); height: 34px; }
+.ibom-tools .btn { background: rgba(20, 26, 34, 0.85); backdrop-filter: blur(4px); height: 34px; padding: 0 14px; display: inline-flex; align-items: center; }
 .ibom-hint { position: absolute; bottom: 10px; left: 12px; font-size: 11px; pointer-events: none; opacity: 0.7; }
 @media (max-width: 820px) {
   .ibom-viewer .ibom-body { flex-direction: column; }
@@ -322,6 +325,10 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .tbl tbody tr:last-child td { border-bottom: none; }
 .tbl .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .tbl tbody tr.hoverable:hover td { background: var(--accent-soft); cursor: pointer; }
+/* Keep an actions column pinned to the right so its buttons never clip when the
+   table is wider than its card. */
+.tbl .col-actions { position: sticky; right: 0; background: var(--panel); box-shadow: -10px 0 10px -10px rgba(0, 0, 0, 0.5); }
+.tbl thead th.col-actions { background: var(--panel-2); }
 .tmpl-row td { background: var(--panel-2); font-weight: 600; cursor: pointer; }
 .tmpl-row td:first-child { border-left: 3px solid var(--accent); }
 .chev { display: inline-flex; width: 14px; color: var(--faint); }

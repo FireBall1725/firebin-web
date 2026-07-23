@@ -239,7 +239,10 @@ function AssetViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => v
           {!url ? (
             <p className="c-faint" style={{ padding: 24 }}>Loading…</p>
           ) : isIbom ? (
-            <iframe title={asset.name} src={url} sandbox="allow-scripts allow-popups allow-downloads" />
+            // iBOM is self-contained but needs localStorage (view prefs) + scripts;
+            // a null-origin sandbox makes localStorage throw and it renders blank.
+            // allow-same-origin lets it run (it's the user's own trusted file).
+            <iframe title={asset.name} src={url} sandbox="allow-scripts allow-same-origin allow-popups allow-downloads" />
           ) : (
             <img src={url} alt={asset.name} />
           )}

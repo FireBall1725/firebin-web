@@ -110,13 +110,43 @@ export function BoardDetailPage() {
 
 function InfoTab({ board, ibom, matched, totalParts }: { board: Board; ibom: ProjectAsset | null; matched: number; totalParts: number }) {
   const lines = board.lines ?? []
+  const [big, setBig] = useState(false)
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0, 320px) 1fr' }}>
       <div className="card" style={{ padding: 12 }}>
         <div style={{ aspectRatio: '4 / 3', borderRadius: 8, background: '#0b0e13', overflow: 'hidden' }}>
-          {ibom ? <BoardThumb assetId={ibom.id} kind={ibom.kind} /> : <div className="grid place-items-center" style={{ height: '100%' }}><span className="c-faint text-sm">No render</span></div>}
+          {ibom ? (
+            <button
+              type="button"
+              onClick={() => setBig(true)}
+              title="Click to enlarge"
+              style={{ display: 'block', width: '100%', height: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'zoom-in' }}
+            >
+              <BoardThumb assetId={ibom.id} kind={ibom.kind} />
+            </button>
+          ) : (
+            <div className="grid place-items-center" style={{ height: '100%' }}><span className="c-faint text-sm">No render</span></div>
+          )}
         </div>
       </div>
+      {big && ibom && (
+        <div className="overlay" onClick={() => setBig(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: 'min(90vw, 1000px)', height: 'min(85vh, 800px)', background: '#0b0e13', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden', position: 'relative' }}
+          >
+            <BoardThumb assetId={ibom.id} kind={ibom.kind} />
+            <button
+              className="icon-btn"
+              onClick={() => setBig(false)}
+              aria-label="Close"
+              style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.4)' }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
       <div className="card">
         <div className="card-h"><h2>Details</h2></div>
         <table className="tbl">

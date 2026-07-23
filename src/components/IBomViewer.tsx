@@ -45,7 +45,7 @@ export function IBomViewer({
   const wrapRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<View | null>(null)
   const pcbRef = useRef<Pcb | null>(null)
-  const byRefRef = useRef<Map<string, Footprint>>(new Map())
+  const byRefRef = useRef<Map<string, Footprint[]>>(new Map())
   const paramsRef = useRef<{ selected: Set<string>; placed: Set<string>; side: Side }>({ selected: new Set(), placed: new Set(), side: 'F' })
 
   useEffect(() => {

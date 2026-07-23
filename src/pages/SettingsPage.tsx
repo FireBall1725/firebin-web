@@ -3,8 +3,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { api, type EnrichmentSettings } from '../lib/api'
+import { PARTS_VIEWS, getPartsView, setPartsView, type PartsView } from '../lib/prefs'
 
 export function SettingsPage() {
+  const [partsView, setPV] = useState<PartsView>(getPartsView)
+  const pickView = (v: PartsView) => { setPartsView(v); setPV(v) }
   const [s, setS] = useState<EnrichmentSettings | null>(null)
   const [clientID, setClientID] = useState('')
   const [secret, setSecret] = useState('')
@@ -51,8 +54,22 @@ export function SettingsPage() {
     <div style={{ maxWidth: 620 }}>
       <span className="eyebrow">Settings</span>
       <h1 className="c-text" style={{ fontSize: 22, fontWeight: 650, letterSpacing: '-0.02em', margin: '2px 0 20px' }}>
-        Connections
+        Preferences
       </h1>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-h"><h2>Parts view</h2></div>
+        <div style={{ padding: 16 }}>
+          <div className="pv-seg">
+            {PARTS_VIEWS.map((o) => (
+              <button key={o.value} className={partsView === o.value ? 'on' : ''} onClick={() => pickView(o.value)}>{o.label}</button>
+            ))}
+          </div>
+          <p className="c-faint" style={{ fontSize: 12, marginTop: 10 }}>
+            How the Parts page lists items: dense table, card grid, or list cards. Remembered on this device.
+          </p>
+        </div>
+      </div>
 
       <div className="card">
         <div className="card-h">

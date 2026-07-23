@@ -223,6 +223,10 @@ export interface Part {
   variants?: Part[]
   manufacturer_parts?: ManufacturerPart[]
   alternatives?: PartAlternative[]
+  primary_mpn?: string
+  primary_manufacturer?: string
+  primary_location?: string
+  primary_location_id?: string
 }
 
 export interface PartAlternative {

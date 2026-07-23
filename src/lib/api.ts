@@ -566,6 +566,14 @@ export const api = {
   getBoard(id: string) {
     return request<Board>(`/boards/${id}`)
   },
+  uploadBoardIbom(boardID: string, file: File) {
+    const form = new FormData()
+    form.append('file', file)
+    return request<ProjectAsset>(`/boards/${boardID}/ibom`, { method: 'POST', body: form })
+  },
+  removeBoardIbom(boardID: string) {
+    return request<{ status: string }>(`/boards/${boardID}/ibom`, { method: 'DELETE' })
+  },
   updateBoard(id: string, body: { name?: string; copies?: number }) {
     return request<Board>(`/boards/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
   },

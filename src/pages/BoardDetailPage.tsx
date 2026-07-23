@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api, type Board, type BOMLine, type BOMLineInput, type Project, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
@@ -28,9 +28,7 @@ export function BoardDetailPage() {
     api.getBoard(boardId).then(setBoard).catch(() => setNotFound(true))
   }, [boardId])
 
-  useEffect(() => {
-    reload()
-    api.getProject(projectId).then(setProject).catch(() => undefined)
+  const reloadAssets = useCallback(() => {
     api
       .listProjectAssets(projectId)
       .then((as) => {
@@ -41,7 +39,13 @@ export function BoardDetailPage() {
         setImages(mine.filter((a) => a.kind === 'image'))
       })
       .catch(() => undefined)
-  }, [projectId, boardId, reload])
+  }, [projectId, boardId])
+
+  useEffect(() => {
+    reload()
+    api.getProject(projectId).then(setProject).catch(() => undefined)
+    reloadAssets()
+  }, [projectId, boardId, reload, reloadAssets])
 
   useRealtime(['projects', 'parts'], reload)
 
@@ -91,20 +95,7 @@ export function BoardDetailPage() {
       {tab === 'info' && <InfoTab board={board} ibom={ibom} images={images} matched={matched} totalParts={totalParts} />}
       {tab === 'bom' && <BomTab board={board} copies={copies} onChanged={reload} />}
       {tab === 'layout' && (
-        <div>
-          {ibom ? (
-            <IBomViewer asset={ibom} inline showPlaced={false} />
-          ) : (
-            <div className="card">
-              <p className="c-dim p-6 text-sm" style={{ lineHeight: 1.6 }}>
-                No interactive BOM for this board. Upload a KiCad project zip that includes one to see the board layout.
-                Generate it with the{' '}
-                <a href="https://github.com/openscopeproject/InteractiveHtmlBom" target="_blank" rel="noreferrer" className="link">Interactive HTML BOM</a>{' '}
-                KiCad plugin (its <span className="mono">bom/ibom.html</span> gets picked up automatically).
-              </p>
-            </div>
-          )}
-        </div>
+        <LayoutTab boardID={boardId} asset={ibom} onChanged={reloadAssets} />
       )}
     </div>
   )
@@ -185,6 +176,80 @@ function Row({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
       <td className="c-dim" style={{ width: '42%' }}>{k}</td>
       <td className={`c-text ${mono ? 'mono' : ''}`} style={{ wordBreak: 'break-word' }}>{v}</td>
     </tr>
+  )
+}
+
+// LayoutTab shows the board layout (real iBOM when present, else FireBin's
+// generated render) plus controls to upload / replace / remove the iBOM.
+function LayoutTab({ boardID, asset, onChanged }: { boardID: string; asset: ProjectAsset | null; onChanged: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isIbom = asset?.kind === 'ibom'
+
+  const upload = async (f: File) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.uploadBoardIbom(boardID, f)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not attach that iBOM')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    if (!confirm('Remove this interactive BOM? The board layout reverts to the render FireBin generated on upload.')) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.removeBoardIbom(boardID)
+      onChanged()
+    } catch {
+      setError('Could not remove the iBOM')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
+        <span className="c-dim text-sm">
+          {isIbom ? 'Showing the uploaded interactive BOM.' : asset ? "Showing FireBin's generated render." : 'No board layout yet.'}
+        </span>
+        <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
+          <button className="btn sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+            {busy ? '…' : isIbom ? 'Replace iBOM' : 'Upload iBOM'}
+          </button>
+          {isIbom && (
+            <button className="btn sm danger" disabled={busy} onClick={remove}>Remove iBOM</button>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".html,.htm"
+            hidden
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
+          />
+        </div>
+      </div>
+      {error && <p className="c-crit text-sm" style={{ marginBottom: 10 }}>{error}</p>}
+
+      {asset ? (
+        <IBomViewer key={asset.id} asset={asset} inline showPlaced={false} />
+      ) : (
+        <div className="card">
+          <p className="c-dim p-6 text-sm" style={{ lineHeight: 1.6 }}>
+            No interactive BOM for this board. Upload one above (the{' '}
+            <a href="https://github.com/openscopeproject/InteractiveHtmlBom" target="_blank" rel="noreferrer" className="link">Interactive HTML BOM</a>{' '}
+            KiCad plugin generates <span className="mono">bom/ibom.html</span>), or upload a KiCad board so FireBin can render its own layout.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 

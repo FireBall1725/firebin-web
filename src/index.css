@@ -319,7 +319,10 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .modal { width: 100%; max-width: 520px; background: var(--panel); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; max-height: 92vh; display: flex; flex-direction: column; }
 .modal-h { padding: 15px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
 .modal-h h3 { margin: 0; font-size: 15px; font-weight: 680; color: var(--text); }
-.modal-b { padding: 18px; overflow-y: auto; }
+.modal-b { padding: 18px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+/* When a form wraps the body + footer, let it fill the modal so the body
+   scrolls and the footer stays pinned instead of overflowing off-screen. */
+.modal > form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
 .modal-f { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; background: var(--panel-2); }
 
 .banner { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 11px; padding: 14px 16px; }

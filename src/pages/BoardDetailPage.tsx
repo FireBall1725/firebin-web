@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api, type Board, type BOMLine, type BOMLineInput, type Project, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { num } from '../lib/format'
 import { IBomViewer } from '../components/IBomViewer'
 import { BoardThumb } from '../components/BoardThumb'
-import { ImageTile, ImageViewer } from '../components/AssetImage'
+import { AssetThumb, ImageViewer } from '../components/AssetImage'
 
 type Tab = 'info' | 'bom' | 'layout'
 
@@ -16,8 +16,7 @@ export function BoardDetailPage() {
   const { projectId = '', boardId = '' } = useParams()
   const [project, setProject] = useState<Project | null>(null)
   const [board, setBoard] = useState<Board | null>(null)
-  const [ibom, setIbom] = useState<ProjectAsset | null>(null)
-  const [images, setImages] = useState<ProjectAsset[]>([])
+  const [assets, setAssets] = useState<ProjectAsset[]>([])
   const [notFound, setNotFound] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const raw = searchParams.get('tab')
@@ -31,13 +30,7 @@ export function BoardDetailPage() {
   const reloadAssets = useCallback(() => {
     api
       .listProjectAssets(projectId)
-      .then((as) => {
-        const mine = as.filter((a) => a.board_id === boardId)
-        setIbom(
-          mine.find((a) => a.kind === 'ibom') ?? mine.find((a) => a.kind === 'pcbrender') ?? null,
-        )
-        setImages(mine.filter((a) => a.kind === 'image'))
-      })
+      .then((as) => setAssets(as.filter((a) => a.board_id === boardId)))
       .catch(() => undefined)
   }, [projectId, boardId])
 
@@ -64,6 +57,12 @@ export function BoardDetailPage() {
   const lines = board.lines ?? []
   const matched = lines.filter((l) => l.match_kind !== 'none').length
   const totalParts = lines.reduce((s, l) => s + l.quantity, 0) * copies
+
+  // Board files: a real iBOM (if any) drives the layout; else the generated
+  // render. Images are extra renders/previews. pcbrender is internal (not shown).
+  const ibomAsset = assets.find((a) => a.kind === 'ibom') ?? null
+  const layoutAsset = ibomAsset ?? assets.find((a) => a.kind === 'pcbrender') ?? null
+  const images = assets.filter((a) => a.kind === 'image')
 
   return (
     <div>
@@ -92,16 +91,36 @@ export function BoardDetailPage() {
         <button className={`tab ${tab === 'layout' ? 'on' : ''}`} onClick={() => setTab('layout')}>Board layout</button>
       </div>
 
-      {tab === 'info' && <InfoTab board={board} ibom={ibom} images={images} matched={matched} totalParts={totalParts} />}
-      {tab === 'bom' && <BomTab board={board} copies={copies} onChanged={reload} />}
-      {tab === 'layout' && (
-        <LayoutTab boardID={boardId} asset={ibom} onChanged={reloadAssets} />
+      {tab === 'info' && (
+        <InfoTab
+          board={board}
+          boardID={boardId}
+          layoutAsset={layoutAsset}
+          ibomAsset={ibomAsset}
+          images={images}
+          matched={matched}
+          totalParts={totalParts}
+          onChanged={reloadAssets}
+        />
       )}
+      {tab === 'bom' && <BomTab board={board} copies={copies} onChanged={reload} />}
+      {tab === 'layout' && <LayoutTab asset={layoutAsset} onGoToFiles={() => setTab('info')} />}
     </div>
   )
 }
 
-function InfoTab({ board, ibom, images, matched, totalParts }: { board: Board; ibom: ProjectAsset | null; images: ProjectAsset[]; matched: number; totalParts: number }) {
+function InfoTab({
+  board, boardID, layoutAsset, ibomAsset, images, matched, totalParts, onChanged,
+}: {
+  board: Board
+  boardID: string
+  layoutAsset: ProjectAsset | null
+  ibomAsset: ProjectAsset | null
+  images: ProjectAsset[]
+  matched: number
+  totalParts: number
+  onChanged: () => void
+}) {
   const lines = board.lines ?? []
   const [big, setBig] = useState(false)
   const [viewImage, setViewImage] = useState<ProjectAsset | null>(null)
@@ -109,27 +128,27 @@ function InfoTab({ board, ibom, images, matched, totalParts }: { board: Board; i
     <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0, 320px) 1fr' }}>
       <div className="card" style={{ padding: 12 }}>
         <div style={{ aspectRatio: '4 / 3', borderRadius: 8, background: '#0b0e13', overflow: 'hidden' }}>
-          {ibom ? (
+          {layoutAsset ? (
             <button
               type="button"
               onClick={() => setBig(true)}
               title="Click to enlarge"
               style={{ display: 'block', width: '100%', height: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'zoom-in' }}
             >
-              <BoardThumb assetId={ibom.id} kind={ibom.kind} />
+              <BoardThumb assetId={layoutAsset.id} kind={layoutAsset.kind} />
             </button>
           ) : (
             <div className="grid place-items-center" style={{ height: '100%' }}><span className="c-faint text-sm">No render</span></div>
           )}
         </div>
       </div>
-      {big && ibom && (
+      {big && layoutAsset && (
         <div className="overlay" onClick={() => setBig(false)}>
           <div
             onClick={(e) => e.stopPropagation()}
             style={{ width: 'min(90vw, 1000px)', height: 'min(85vh, 800px)', background: '#0b0e13', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden', position: 'relative' }}
           >
-            <BoardThumb assetId={ibom.id} kind={ibom.kind} />
+            <BoardThumb assetId={layoutAsset.id} kind={layoutAsset.kind} />
             <button
               className="icon-btn"
               onClick={() => setBig(false)}
@@ -155,17 +174,110 @@ function InfoTab({ board, ibom, images, matched, totalParts }: { board: Board; i
         </table>
       </div>
 
-      {images.length > 0 && (
-        <div className="card" style={{ gridColumn: '1 / -1' }}>
-          <div className="card-h"><h2>Renders</h2></div>
-          <div className="tiles" style={{ padding: 12 }}>
-            {images.map((a) => (
-              <ImageTile key={a.id} asset={a} onOpen={() => setViewImage(a)} />
-            ))}
-          </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <FilesCard boardID={boardID} ibom={ibomAsset} images={images} onChanged={onChanged} onView={setViewImage} />
+      </div>
+      {viewImage && <ImageViewer asset={viewImage} onClose={() => setViewImage(null)} />}
+    </div>
+  )
+}
+
+// FilesCard is the single place to manage a board's files: upload an interactive
+// BOM (drives the layout) or images, and delete any of them.
+function FilesCard({
+  boardID, ibom, images, onChanged, onView,
+}: {
+  boardID: string
+  ibom: ProjectAsset | null
+  images: ProjectAsset[]
+  onChanged: () => void
+  onView: (a: ProjectAsset) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const upload = async (f: File) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.uploadBoardAsset(boardID, f)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not upload that file')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const del = async (a: ProjectAsset) => {
+    const isIbom = a.kind === 'ibom'
+    const msg = isIbom
+      ? 'Delete this interactive BOM? The board layout reverts to the render FireBin generated on upload.'
+      : `Delete "${a.name}"?`
+    if (!confirm(msg)) return
+    await api.deleteAsset(a.id).catch(() => undefined)
+    onChanged()
+  }
+
+  const empty = !ibom && images.length === 0
+
+  return (
+    <div className="card">
+      <div className="card-h">
+        <h2>Files</h2>
+        <button className="btn sm primary" style={{ marginLeft: 'auto' }} disabled={busy} onClick={() => inputRef.current?.click()}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+          {busy ? 'Uploading…' : 'Upload'}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".html,.htm,.png,.jpg,.jpeg,.gif,.webp,.svg,.bmp"
+          hidden
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
+        />
+      </div>
+      {error && <p className="c-crit text-sm" style={{ padding: '0 12px' }}>{error}</p>}
+      {empty ? (
+        <p className="c-faint text-sm" style={{ padding: 16, lineHeight: 1.6 }}>
+          No files yet. Upload an interactive BOM (<span className="mono">.html</span> from the{' '}
+          <a href="https://github.com/openscopeproject/InteractiveHtmlBom" target="_blank" rel="noreferrer" className="link">Interactive HTML BOM</a>{' '}
+          plugin) to drive the board layout, or images (renders, photos).
+        </p>
+      ) : (
+        <div className="tiles" style={{ padding: 12 }}>
+          {ibom && (
+            <FileTile label="Interactive BOM" sub="drives the board layout" onDelete={() => del(ibom)}>
+              <BoardThumb assetId={ibom.id} kind={ibom.kind} />
+            </FileTile>
+          )}
+          {images.map((a) => (
+            <FileTile key={a.id} label={a.name} onOpen={() => onView(a)} onDelete={() => del(a)}>
+              <AssetThumb asset={a} />
+            </FileTile>
+          ))}
         </div>
       )}
-      {viewImage && <ImageViewer asset={viewImage} onClose={() => setViewImage(null)} />}
+    </div>
+  )
+}
+
+// FileTile is a file thumbnail with a hover delete button (and optional open).
+function FileTile({ label, sub, onOpen, onDelete, children }: { label: string; sub?: string; onOpen?: () => void; onDelete: () => void; children: ReactNode }) {
+  return (
+    <div className="tile" style={{ position: 'relative', cursor: onOpen ? 'pointer' : 'default' }}>
+      <button
+        className="icon-btn sm"
+        title="Delete"
+        onClick={(e) => { e.stopPropagation(); onDelete() }}
+        style={{ position: 'absolute', top: 6, right: 6, zIndex: 2, background: 'rgba(0,0,0,0.5)' }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+      </button>
+      <div className="tile-art" onClick={onOpen}>{children}</div>
+      <div className="tile-name truncate" onClick={onOpen}>{label}</div>
+      {sub && <div className="tile-sub"><span className="c-faint" style={{ fontSize: 11 }}>{sub}</span></div>}
     </div>
   )
 }
@@ -179,76 +291,19 @@ function Row({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
   )
 }
 
-// LayoutTab shows the board layout (real iBOM when present, else FireBin's
-// generated render) plus controls to upload / replace / remove the iBOM.
-function LayoutTab({ boardID, asset, onChanged }: { boardID: string; asset: ProjectAsset | null; onChanged: () => void }) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const isIbom = asset?.kind === 'ibom'
-
-  const upload = async (f: File) => {
-    setBusy(true)
-    setError(null)
-    try {
-      await api.uploadBoardIbom(boardID, f)
-      onChanged()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not attach that iBOM')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const remove = async () => {
-    if (!confirm('Remove this interactive BOM? The board layout reverts to the render FireBin generated on upload.')) return
-    setBusy(true)
-    setError(null)
-    try {
-      await api.removeBoardIbom(boardID)
-      onChanged()
-    } catch {
-      setError('Could not remove the iBOM')
-    } finally {
-      setBusy(false)
-    }
-  }
-
+// LayoutTab shows the board layout: the uploaded iBOM when present, else the
+// render FireBin generated on upload. Files are managed on the Board info tab.
+function LayoutTab({ asset, onGoToFiles }: { asset: ProjectAsset | null; onGoToFiles: () => void }) {
+  if (asset) return <IBomViewer key={asset.id} asset={asset} inline showPlaced={false} />
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 12 }}>
-        <span className="c-dim text-sm">
-          {isIbom ? 'Showing the uploaded interactive BOM.' : asset ? "Showing FireBin's generated render." : 'No board layout yet.'}
-        </span>
-        <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
-          <button className="btn sm" disabled={busy} onClick={() => inputRef.current?.click()}>
-            {busy ? '…' : isIbom ? 'Replace iBOM' : 'Upload iBOM'}
-          </button>
-          {isIbom && (
-            <button className="btn sm danger" disabled={busy} onClick={remove}>Remove iBOM</button>
-          )}
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".html,.htm"
-            hidden
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }}
-          />
-        </div>
-      </div>
-      {error && <p className="c-crit text-sm" style={{ marginBottom: 10 }}>{error}</p>}
-
-      {asset ? (
-        <IBomViewer key={asset.id} asset={asset} inline showPlaced={false} />
-      ) : (
-        <div className="card">
-          <p className="c-dim p-6 text-sm" style={{ lineHeight: 1.6 }}>
-            No interactive BOM for this board. Upload one above (the{' '}
-            <a href="https://github.com/openscopeproject/InteractiveHtmlBom" target="_blank" rel="noreferrer" className="link">Interactive HTML BOM</a>{' '}
-            KiCad plugin generates <span className="mono">bom/ibom.html</span>), or upload a KiCad board so FireBin can render its own layout.
-          </p>
-        </div>
-      )}
+    <div className="card">
+      <p className="c-dim p-6 text-sm" style={{ lineHeight: 1.6 }}>
+        No board layout yet. Add an interactive BOM on the{' '}
+        <button className="link" onClick={onGoToFiles} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Board info</button>{' '}
+        tab (upload the <span className="mono">bom/ibom.html</span> from the{' '}
+        <a href="https://github.com/openscopeproject/InteractiveHtmlBom" target="_blank" rel="noreferrer" className="link">Interactive HTML BOM</a>{' '}
+        plugin), or upload a KiCad board so FireBin can render its own layout.
+      </p>
     </div>
   )
 }

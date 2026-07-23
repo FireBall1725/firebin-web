@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type ProjectAsset, type BOMLine } from '../lib/api'
 import {
@@ -36,8 +36,9 @@ export function IBomViewer({
   const [pcb, setPcb] = useState<Pcb | null>(null)
   const [lines, setLines] = useState<BOMLine[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [selId, setSelId] = useState<string | null>(null)
-  const [placed, setPlaced] = useState<Set<string>>(new Set())
+  const [sel, setSel] = useState<Set<string>>(new Set()) // highlighted refs (hover)
+  const [placed, setPlaced] = useState<Set<string>>(new Set()) // placed refs
+  const [expanded, setExpanded] = useState<Set<string>>(new Set()) // expanded line ids
   const [side, setSide] = useState<Side>('F')
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -70,31 +71,29 @@ export function IBomViewer({
     }
   }, [boardID, showPlaced])
 
-  const togglePlaced = useCallback((lineID: string) => {
+  const persistPlaced = useCallback((next: Set<string>) => {
+    if (!boardID) return
+    try {
+      localStorage.setItem(placedKey(boardID), JSON.stringify([...next]))
+    } catch {
+      // storage unavailable
+    }
+  }, [boardID])
+
+  // Placement is tracked per reference designator (uppercase).
+  const setPlacedRefs = useCallback((refs: string[], on: boolean) => {
     setPlaced((prev) => {
       const next = new Set(prev)
-      next.has(lineID) ? next.delete(lineID) : next.add(lineID)
-      if (boardID) {
-        try {
-          localStorage.setItem(placedKey(boardID), JSON.stringify([...next]))
-        } catch {
-          // storage unavailable
-        }
-      }
+      for (const r of refs) (on ? next.add(r) : next.delete(r))
+      persistPlaced(next)
       return next
     })
-  }, [boardID])
+  }, [persistPlaced])
 
   const byRef = useMemo(() => buildRefIndex(pcb), [pcb])
 
-  const refsOf = (line: BOMLine | undefined) =>
-    new Set((line?.refs ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean))
-  const selectedRefs = useMemo(() => refsOf(lines.find((l) => l.id === selId)), [lines, selId])
-  const placedRefs = useMemo(() => {
-    const s = new Set<string>()
-    for (const l of lines) if (placed.has(l.id)) for (const r of refsOf(l)) s.add(r)
-    return s
-  }, [lines, placed])
+  const selectedRefs = sel
+  const placedRefs = placed
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current
@@ -196,15 +195,30 @@ export function IBomViewer({
     }
   }, [pcb, redraw])
 
-  const placedCount = lines.filter((l) => placed.has(l.id)).length
+  const refList = (line: BOMLine) =>
+    line.refs.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+  const lineState = (refs: string[]): 'all' | 'some' | 'none' => {
+    if (refs.length === 0) return 'none'
+    const n = refs.filter((r) => placed.has(r)).length
+    return n === 0 ? 'none' : n === refs.length ? 'all' : 'some'
+  }
+  const toggleExpand = (id: string) =>
+    setExpanded((prev) => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+
+  const allRefs = lines.flatMap(refList)
+  const placedCount = allRefs.filter((r) => placed.has(r)).length
 
   const body = (
     <>
         {!inline && (
           <div className="modal-h">
             <h3 className="truncate">Interactive BOM{pcb?.metadata?.title ? ` · ${pcb.metadata.title}` : ''}</h3>
-            {showPlaced && lines.length > 0 && (
-              <span className="pill ghost" style={{ marginLeft: 10 }}>{placedCount}/{lines.length} placed</span>
+            {showPlaced && allRefs.length > 0 && (
+              <span className="pill ghost" style={{ marginLeft: 10 }}>{placedCount}/{allRefs.length} placed</span>
             )}
             <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -218,6 +232,7 @@ export function IBomViewer({
               <thead>
                 <tr>
                   {showPlaced && <th style={{ width: 34 }} title="Placed"></th>}
+                  <th style={{ width: 24 }}></th>
                   <th className="num" style={{ width: 34 }}>Qty</th>
                   <th>References</th>
                   <th>Value</th>
@@ -225,32 +240,66 @@ export function IBomViewer({
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l) => (
-                  <tr
-                    key={l.id}
-                    className={`ibom-row ${selId === l.id ? 'on' : ''} ${placed.has(l.id) ? 'placed' : ''}`}
-                    onMouseEnter={() => setSelId(l.id)}
-                    onClick={() => setSelId(l.id)}
-                  >
-                    {showPlaced && (
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" checked={placed.has(l.id)} onChange={() => togglePlaced(l.id)} aria-label={`Placed ${l.refs}`} />
-                      </td>
-                    )}
-                    <td className="num c-text">{l.quantity}</td>
-                    <td className="mono c-dim" style={{ fontSize: 11.5 }}>{l.refs}</td>
-                    <td className="c-text" style={{ fontSize: 12.5 }}>{l.value || '—'}</td>
-                    <td>
-                      {l.part_id ? (
-                        <Link to={`/parts/${l.part_id}`} className="pill ok" style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
-                          in stock ↗
-                        </Link>
-                      ) : (
-                        <span className="c-faint" style={{ fontSize: 11 }}>—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {lines.map((l) => {
+                  const refs = refList(l)
+                  const st = lineState(refs)
+                  const open = expanded.has(l.id)
+                  const canExpand = refs.length > 1
+                  const on = refs.length > 0 && sel.size === refs.length && refs.every((r) => sel.has(r))
+                  return (
+                    <Fragment key={l.id}>
+                      <tr
+                        className={`ibom-row ${on ? 'on' : ''} ${st === 'all' ? 'placed' : ''}`}
+                        onMouseEnter={() => setSel(new Set(refs))}
+                      >
+                        {showPlaced && (
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              ref={(el) => { if (el) el.indeterminate = st === 'some' }}
+                              checked={st === 'all'}
+                              onChange={() => setPlacedRefs(refs, st !== 'all')}
+                              aria-label={`Placed ${l.refs}`}
+                            />
+                          </td>
+                        )}
+                        <td style={{ paddingRight: 0 }}>
+                          {canExpand && (
+                            <button className={`ibom-caret ${open ? 'open' : ''}`} onClick={() => toggleExpand(l.id)} aria-label={open ? 'Collapse' : 'Expand'}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 6l6 6-6 6" /></svg>
+                            </button>
+                          )}
+                        </td>
+                        <td className="num c-text">{l.quantity}</td>
+                        <td className="mono c-dim" style={{ fontSize: 11.5 }}>{l.refs}</td>
+                        <td className="c-text" style={{ fontSize: 12.5 }}>{l.value || '—'}</td>
+                        <td>
+                          {l.part_id ? (
+                            <Link to={`/parts/${l.part_id}`} className="pill ok" style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                              in stock ↗
+                            </Link>
+                          ) : (
+                            <span className="c-faint" style={{ fontSize: 11 }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                      {open && canExpand && refs.map((r) => (
+                        <tr key={`${l.id}:${r}`} className={`ibom-subrow ${sel.size === 1 && sel.has(r) ? 'on' : ''} ${placed.has(r) ? 'placed' : ''}`} onMouseEnter={() => setSel(new Set([r]))}>
+                          {showPlaced && (
+                            <td onClick={(e) => e.stopPropagation()}>
+                              <input type="checkbox" checked={placed.has(r)} onChange={() => setPlacedRefs([r], !placed.has(r))} aria-label={`Placed ${r}`} />
+                            </td>
+                          )}
+                          <td></td>
+                          <td></td>
+                          <td className="mono c-dim" style={{ fontSize: 11.5 }}>{r}</td>
+                          <td></td>
+                          <td></td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -179,10 +179,10 @@ function BomTab({ board, copies, onChanged }: { board: Board; copies: number; on
                 {l.quantity * copies}
                 {copies > 1 && <span className="c-faint" style={{ fontSize: 10 }}> ({l.quantity}×{copies})</span>}
               </td>
-              <td className="mono c-dim" style={{ fontSize: 12 }}>{l.refs || '—'}</td>
-              <td className="c-text">{l.value || <span className="c-faint">—</span>}</td>
-              <td className="mono c-faint" style={{ fontSize: 11.5 }}>{shortFootprint(l.footprint)}</td>
-              <td className="mono c-faint" style={{ fontSize: 11.5 }}>{l.mpn || '—'}</td>
+              <td className="mono c-dim" style={{ fontSize: 12 }}><span className="cell-trunc" style={{ maxWidth: 180 }} title={l.refs}>{l.refs || '—'}</span></td>
+              <td className="c-text"><span className="cell-trunc" title={l.value}>{l.value || <span className="c-faint">—</span>}</span></td>
+              <td className="mono c-faint" style={{ fontSize: 11.5 }}><span className="cell-trunc" title={l.footprint}>{shortFootprint(l.footprint)}</span></td>
+              <td className="mono c-faint" style={{ fontSize: 11.5 }}><span className="cell-trunc" style={{ maxWidth: 150 }} title={l.mpn}>{l.mpn || '—'}</span></td>
               <td>
                 {l.part_id ? (
                   <Link to={`/parts/${l.part_id}`} className="pill ok" style={{ whiteSpace: 'nowrap' }}>{l.part_name} ↗</Link>

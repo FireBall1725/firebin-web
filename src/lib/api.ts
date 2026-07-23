@@ -133,7 +133,7 @@ export interface UploadBoardOpts {
   attachIbom?: boolean
 }
 
-export type MatchKind = 'fbpn' | 'mpn' | 'supplier' | 'value_footprint' | 'manual' | 'none'
+export type MatchKind = 'fbpn' | 'project' | 'mpn' | 'supplier' | 'value_footprint' | 'manual' | 'none'
 
 export interface BOMLine {
   id: string

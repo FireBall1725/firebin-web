@@ -231,12 +231,12 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
               </svg>
               <div className="dz-title">{busy ? 'Reading…' : dragging ? 'Drop to read' : 'Drag a KiCad file here, or click to browse'}</div>
               <div className="dz-sub">
-                A zipped KiCad project <span className="mono">.zip</span> (best — merges all sheets and pulls in renders/iBOM), a single <span className="mono">.kicad_sch</span>, or a KiCad BOM <span className="mono">.csv</span>.
+                A zipped KiCad project <span className="mono">.zip</span> (best — merges sheets and pulls in renders + the interactive BOM), a schematic <span className="mono">.kicad_sch</span> or board <span className="mono">.kicad_pcb</span>, or a BOM <span className="mono">.csv</span>. The BOM comes from the schematic when both are present.
               </div>
               <input
                 ref={inputRef}
                 type="file"
-                accept=".zip,.kicad_sch,.csv,.tsv"
+                accept=".zip,.kicad_sch,.kicad_pcb,.csv,.tsv"
                 hidden
                 disabled={busy}
                 onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])}

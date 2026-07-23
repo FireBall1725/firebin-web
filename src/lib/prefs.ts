@@ -30,15 +30,35 @@ export function setPartsView(v: PartsView) {
 // usePartsView reads the preference and re-renders when it changes (here or in
 // another tab).
 export function usePartsView(): PartsView {
-  const [view, setView] = useState<PartsView>(getPartsView)
+  return usePref(getPartsView)
+}
+
+// ── Hardware (keyboard-wedge) barcode scanner ────────────────────────────────
+const HW_KEY = 'firebin.hardwareScanner'
+
+export function getHardwareScanner(): boolean {
+  return localStorage.getItem(HW_KEY) !== 'off' // on by default
+}
+export function setHardwareScanner(on: boolean) {
+  localStorage.setItem(HW_KEY, on ? 'on' : 'off')
+  window.dispatchEvent(new CustomEvent(EVENT))
+}
+export function useHardwareScanner(): boolean {
+  return usePref(getHardwareScanner)
+}
+
+// usePref subscribes any getter to the prefs-changed + storage events.
+function usePref<T>(get: () => T): T {
+  const [v, setV] = useState<T>(get)
   useEffect(() => {
-    const update = () => setView(getPartsView())
+    const update = () => setV(get())
     window.addEventListener(EVENT, update)
     window.addEventListener('storage', update)
     return () => {
       window.removeEventListener(EVENT, update)
       window.removeEventListener('storage', update)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  return view
+  return v
 }

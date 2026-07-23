@@ -6,6 +6,7 @@
 // full interactive viewer and small board thumbnails.
 
 import LZString from 'lz-string'
+import { NEWSTROKE } from './newstroke'
 
 export type Drawing = Record<string, unknown>
 export type Side = 'F' | 'B'
@@ -210,22 +211,7 @@ function drawSilk(ctx: CanvasRenderingContext2D, d: Drawing) {
     return
   }
   if (t === 'text' && typeof d.text === 'string') {
-    // Generated (pcbrender) silk text — draw with canvas at board-mm size.
-    const pos = (d.pos as number[]) || [0, 0]
-    const size = (d.size as number) || 1
-    const hj = (d.justify as string) || 'center'
-    const vj = (d.vjustify as string) || 'center'
-    ctx.save()
-    ctx.translate(pos[0], pos[1])
-    ctx.rotate((-(d.angle as number) * Math.PI) / 180)
-    ctx.font = `${size}px sans-serif`
-    ctx.textAlign = hj === 'left' ? 'left' : hj === 'right' ? 'right' : 'center'
-    ctx.textBaseline = vj === 'top' ? 'top' : vj === 'bottom' ? 'bottom' : 'middle'
-    const lines = d.text.split('\n')
-    const lh = size * 1.15
-    const y0 = (-(lines.length - 1) / 2) * lh
-    lines.forEach((ln, i) => ctx.fillText(ln, 0, y0 + i * lh))
-    ctx.restore()
+    drawStrokeText(ctx, d)
     return
   }
   if (t === 'polygon' && Array.isArray(d.polygons)) {
@@ -245,6 +231,59 @@ function drawSilk(ctx: CanvasRenderingContext2D, d: Drawing) {
   }
   ctx.lineWidth = (d.width as number) || 0.12
   strokeDrawing(ctx, d)
+}
+
+// drawStrokeText renders a generated-render text element with the KiCad
+// newstroke stroke font (so silk labels match KiCad, not the browser sans-serif).
+// Ports InteractiveHtmlBom's drawText: glyph coords are in text-height units
+// (baseline y≈0, caps up to y≈-1); width/height = the text size in mm.
+function drawStrokeText(ctx: CanvasRenderingContext2D, d: Drawing) {
+  const text = d.text as string
+  const pos = (d.pos as number[]) || [0, 0]
+  const size = (d.size as number) || 1
+  const thickness = (d.thickness as number) || size * 0.15
+  const jx = justifyX((d.justify as string) || 'center')
+  const jy = justifyY((d.vjustify as string) || 'center')
+  const advance = (ch: string) => (NEWSTROKE[ch]?.w ?? 0.6) * size
+
+  ctx.save()
+  ctx.translate(pos[0], pos[1])
+  ctx.rotate((-(d.angle as number) * Math.PI) / 180)
+  ctx.lineWidth = thickness
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  const lines = text.split('\n')
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop()
+  const interline = size * 1.5 + thickness
+  let offsety = ((1 - jy) / 2) * size - ((lines.length - 1) * (jy + 1) * interline) / 2
+
+  for (const line of lines) {
+    let lineWidth = 0
+    for (const ch of line) lineWidth += advance(ch)
+    let offsetx = (-lineWidth * (jx + 1)) / 2
+    for (const ch of line) {
+      const glyph = NEWSTROKE[ch]
+      if (glyph) {
+        for (const stroke of glyph.l) {
+          ctx.beginPath()
+          ctx.moveTo(stroke[0][0] * size + offsetx, stroke[0][1] * size + offsety)
+          for (let k = 1; k < stroke.length; k++) ctx.lineTo(stroke[k][0] * size + offsetx, stroke[k][1] * size + offsety)
+          ctx.stroke()
+        }
+      }
+      offsetx += advance(ch)
+    }
+    offsety += interline
+  }
+  ctx.restore()
+}
+
+function justifyX(h: string): number {
+  return h === 'left' ? -1 : h === 'right' ? 1 : 0
+}
+function justifyY(v: string): number {
+  return v === 'top' ? -1 : v === 'bottom' ? 1 : 0
 }
 
 function fillPadCopper(ctx: CanvasRenderingContext2D, p: Pad) {

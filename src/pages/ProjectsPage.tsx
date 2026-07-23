@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api, type Project } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { ProjectFormModal } from '../components/ProjectFormModal'
+import { ProjectCover } from '../components/ProjectCover'
 
 export function ProjectsPage() {
   const navigate = useNavigate()
@@ -43,17 +44,22 @@ export function ProjectsPage() {
       ) : (
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
           {projects.map((p) => (
-            <Link key={p.id} to={`/projects/${p.id}`} className="card hoverable-link" style={{ padding: 16, display: 'block' }}>
-              <span className="eyebrow">Project</span>
-              <div className="c-text" style={{ fontSize: 16, fontWeight: 600, margin: '3px 0 6px', letterSpacing: '-0.01em' }}>
-                {p.name}
+            <Link key={p.id} to={`/projects/${p.id}`} className="card hoverable-link" style={{ padding: 0, display: 'block', overflow: 'hidden' }}>
+              <div style={{ aspectRatio: '16 / 9', background: '#0b0e13', borderBottom: '1px solid var(--border)' }}>
+                <ProjectCover project={p} />
               </div>
-              {p.description && (
-                <p className="c-dim" style={{ fontSize: 12.5, margin: '0 0 10px', lineHeight: 1.4 }}>{p.description}</p>
-              )}
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="pill ghost">{p.board_count} {p.board_count === 1 ? 'board' : 'boards'}</span>
-                {p.tags.map((t) => <span key={t} className="pill ghost" style={{ fontSize: 11 }}>{t}</span>)}
+              <div style={{ padding: 14 }}>
+                <span className="eyebrow">Project</span>
+                <div className="c-text" style={{ fontSize: 16, fontWeight: 600, margin: '3px 0 6px', letterSpacing: '-0.01em' }}>
+                  {p.name}
+                </div>
+                {p.description && (
+                  <p className="c-dim" style={{ fontSize: 12.5, margin: '0 0 10px', lineHeight: 1.4 }}>{p.description}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="pill ghost">{p.board_count} {p.board_count === 1 ? 'board' : 'boards'}</span>
+                  {p.tags.map((t) => <span key={t} className="pill ghost" style={{ fontSize: 11 }}>{t}</span>)}
+                </div>
               </div>
             </Link>
           ))}

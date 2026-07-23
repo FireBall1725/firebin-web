@@ -116,12 +116,12 @@ export function PartsGrid({ parts, catName, onOpen, onAdjust }: ViewProps) {
             </div>
             <div className="b">
               <div className="nm truncate">{p.name}</div>
-              <div className="flex items-center gap-2" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+              <div className="meta flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
                 {p.package && <span className="pill ghost">{p.package}</span>}
                 {p.ipn && <span className="mono c-faint" style={{ fontSize: 11 }}>{p.ipn}</span>}
               </div>
-              <div className="flex items-center justify-between" style={{ marginTop: 10 }}>
-                <span className="mono c-dim" style={{ fontSize: 11 }}>{p.primary_mpn || (p.variant_count ? `${p.variant_count} variants` : '')}</span>
+              <div className="foot flex items-center justify-between">
+                <span className="mono c-dim truncate" style={{ fontSize: 11, maxWidth: '62%' }}>{p.primary_mpn || (p.variant_count ? `${p.variant_count} variants` : '')}</span>
                 <span className={`pill ${isLow(p) ? 'low' : 'ok'}`}>{num(p.total_stock)}</span>
               </div>
             </div>

@@ -80,6 +80,15 @@ export interface Part {
   parameters?: PartParameter[]
   variants?: Part[]
   manufacturer_parts?: ManufacturerPart[]
+  alternatives?: PartAlternative[]
+}
+
+export interface PartAlternative {
+  mpn: string
+  manufacturer?: string
+  description?: string
+  part_id?: string
+  part_name?: string
 }
 
 export interface ParameterInput {

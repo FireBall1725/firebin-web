@@ -187,6 +187,34 @@ export function PartDetailPage() {
         <ManufacturerParts partID={part.id} items={part.manufacturer_parts ?? []} onChanged={reload} />
       </div>
 
+      {/* Alternatives (from Octopart), linked to inventory when we stock them */}
+      {part.alternatives && part.alternatives.length > 0 && (
+        <Section title="Alternatives" className="mt-4" flush>
+          <div>
+            {part.alternatives.map((a) => (
+              <div key={a.mpn} className="flex items-center justify-between px-4 py-2.5 bd-b">
+                <div className="min-w-0">
+                  <span className="mono text-sm">{a.mpn}</span>
+                  {a.manufacturer && (
+                    <span className="c-dim" style={{ marginLeft: 8, fontSize: 12 }}>{a.manufacturer}</span>
+                  )}
+                  {a.description && (
+                    <div className="c-faint" style={{ fontSize: 11, marginTop: 2 }}>{a.description}</div>
+                  )}
+                </div>
+                {a.part_id ? (
+                  <Link to={`/parts/${a.part_id}`} className="pill ok" style={{ whiteSpace: 'nowrap' }}>
+                    in stock ↗
+                  </Link>
+                ) : (
+                  <span className="c-faint" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>not stocked</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* History */}
       <Section title="Stock history" className="mt-4">
         {history.length > 0 ? (

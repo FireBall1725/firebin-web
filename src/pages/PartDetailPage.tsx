@@ -12,7 +12,7 @@ import {
   type Category,
   type AdjustKind,
 } from '../lib/api'
-import { NewPartModal } from '../components/NewPartModal'
+import { PartFormModal } from '../components/PartForm'
 import { ManufacturerParts } from '../components/ManufacturerParts'
 import { num } from '../lib/format'
 import { useRealtime } from '../lib/useRealtime'
@@ -242,9 +242,10 @@ export function PartDetailPage() {
       </Section>
 
       {addVariant && (
-        <NewPartModal
+        <PartFormModal
           categories={categories}
-          variantOf={part.id}
+          title="New variant"
+          initial={{ variant_of: part.id }}
           onClose={() => setAddVariant(false)}
           onCreated={() => {
             setAddVariant(false)

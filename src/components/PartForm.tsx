@@ -24,6 +24,7 @@ export interface PartDraft {
   category?: string
   package?: string
   description?: string
+  variant_of?: string
   is_template?: boolean
   minimum_stock?: number
   parameters?: ParameterInput[]
@@ -117,6 +118,7 @@ export function PartForm({
       const part = await api.createPart({
         name: name.trim(),
         category_id: categoryID,
+        variant_of: initial?.variant_of ?? null,
         package: pkg || null,
         description: description || null,
         is_template: isTemplate,
@@ -203,10 +205,12 @@ export function PartForm({
           />
         </L>
 
-        <label className="flex items-center gap-2 text-sm c-dim">
-          <input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} />
-          This is a template (a grouping that holds variants, e.g. “1k resistor”)
-        </label>
+        {!initial?.variant_of && (
+          <label className="flex items-center gap-2 text-sm c-dim">
+            <input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} />
+            This is a template (a grouping that holds variants, e.g. “1k resistor”)
+          </label>
+        )}
 
         {!isTemplate && (
           <>

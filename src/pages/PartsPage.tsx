@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Part, type Category } from '../lib/api'
-import { NewPartModal } from '../components/NewPartModal'
+import { PartFormModal } from '../components/PartForm'
 import { num } from '../lib/format'
 import { useRealtime } from '../lib/useRealtime'
 
@@ -156,7 +156,7 @@ export function PartsPage() {
       </div>
 
       {showNew && (
-        <NewPartModal
+        <PartFormModal
           categories={categories}
           onClose={() => setShowNew(false)}
           onCreated={(id) => {

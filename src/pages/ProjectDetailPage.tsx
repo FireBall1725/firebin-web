@@ -3,10 +3,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, type Project, type Board, type BOMLine, type ProjectAsset } from '../lib/api'
+import { api, type Project, type Board, type ProjectAsset } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
-import { num } from '../lib/format'
 import { IBomViewer } from '../components/IBomViewer'
+import { BoardThumb } from '../components/BoardThumb'
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams()
@@ -15,7 +15,8 @@ export function ProjectDetailPage() {
   const [assets, setAssets] = useState<ProjectAsset[]>([])
   const [notFound, setNotFound] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
-  const [viewing, setViewing] = useState<ProjectAsset | null>(null)
+  const [viewingImage, setViewingImage] = useState<ProjectAsset | null>(null)
+  const [viewingIbom, setViewingIbom] = useState<ProjectAsset | null>(null)
 
   const reload = useCallback(() => {
     api.getProject(id).then(setProject).catch(() => setNotFound(true))
@@ -42,8 +43,9 @@ export function ProjectDetailPage() {
   }
 
   const boards = project.boards ?? []
-  const ibom = assets.filter((a) => a.kind === 'ibom')
-  const images = assets.filter((a) => a.kind === 'image')
+  const ibomFor = (board: Board) => assets.find((a) => a.kind === 'ibom' && a.board_id === board.id)
+  const ibomAssets = assets.filter((a) => a.kind === 'ibom')
+  const imageAssets = assets.filter((a) => a.kind === 'image')
 
   return (
     <div>
@@ -61,7 +63,6 @@ export function ProjectDetailPage() {
           {project.description && <p className="c-dim" style={{ fontSize: 13.5, margin: 0 }}>{project.description}</p>}
         </div>
         <div className="flex items-center gap-2">
-          <span className="pill ghost">{boards.length} {boards.length === 1 ? 'board' : 'boards'}</span>
           <button onClick={() => setShowUpload(true)} className="btn primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
             Upload
@@ -70,47 +71,66 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Interactive BOM + renders pulled from the uploaded project zip. */}
-      {(ibom.length > 0 || images.length > 0) && (
-        <section className="card mt-5">
-          <div className="card-h"><h2>Renders &amp; files</h2></div>
-          <div className="p-4 space-y-4">
-            {ibom.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {ibom.map((a) => (
-                  <button key={a.id} onClick={() => setViewing(a)} className="btn primary">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h18v18H3zM3 9h18M9 21V9" /></svg>
-                    Interactive BOM
-                  </button>
-                ))}
-              </div>
-            )}
-            {images.length > 0 && (
-              <div className="asset-grid">
-                {images.map((a) => (
-                  <AssetThumb key={a.id} asset={a} onOpen={() => setViewing(a)} />
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Boards + their BOMs. */}
-      <div className="mt-4 space-y-4">
+      {/* Boards */}
+      <div className="mt-6">
+        <div className="tiles-h"><span className="eyebrow">Boards</span></div>
         {boards.length === 0 ? (
-          <div className="card"><p className="c-faint p-6 text-sm">No boards yet. Use Upload to add one from a KiCad file.</p></div>
+          <p className="c-faint text-sm">No boards yet. Use Upload to add one from a KiCad file.</p>
         ) : (
-          boards.map((b) => <BoardCard key={b.id} board={b} onChanged={reload} />)
+          <div className="tiles">
+            {boards.map((b) => {
+              const ib = ibomFor(b)
+              return (
+                <Link key={b.id} to={`/projects/${project.id}/boards/${b.id}`} className="tile">
+                  <div className="tile-art">
+                    {ib ? <BoardThumb assetId={ib.id} /> : <BoardGlyph />}
+                  </div>
+                  <div className="tile-name truncate">{b.name}</div>
+                  <div className="tile-sub">
+                    {b.kind === 'panel' && <span className="pill accent">{b.copies}-up</span>}
+                    <span className="c-faint">{b.line_count} lines</span>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         )}
       </div>
+
+      {/* Files: iBOMs + renders */}
+      {(ibomAssets.length > 0 || imageAssets.length > 0) && (
+        <div className="mt-6">
+          <div className="tiles-h"><span className="eyebrow">Files</span></div>
+          <div className="tiles">
+            {ibomAssets.map((a) => (
+              <button key={a.id} className="tile" onClick={() => setViewingIbom(a)}>
+                <div className="tile-art"><BoardThumb assetId={a.id} /></div>
+                <div className="tile-name truncate">Interactive BOM</div>
+                <div className="tile-sub"><span className="c-faint mono" style={{ fontSize: 10.5 }}>{a.name}</span></div>
+              </button>
+            ))}
+            {imageAssets.map((a) => (
+              <ImageTile key={a.id} asset={a} onOpen={() => setViewingImage(a)} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {showUpload && (
         <UploadModal projectID={project.id} onClose={() => setShowUpload(false)} onDone={reload} />
       )}
-      {viewing && viewing.kind === 'ibom' && <IBomViewer asset={viewing} onClose={() => setViewing(null)} />}
-      {viewing && viewing.kind !== 'ibom' && <AssetViewer asset={viewing} onClose={() => setViewing(null)} />}
+      {viewingIbom && <IBomViewer asset={viewingIbom} onClose={() => setViewingIbom(null)} showPlaced={false} />}
+      {viewingImage && <ImageViewer asset={viewingImage} onClose={() => setViewingImage(null)} />}
     </div>
+  )
+}
+
+function BoardGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" width="42" height="42" style={{ color: 'var(--faint)' }}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M7 7h4v4H7zM7 15h.01M11 15h.01M15 15h4v-4h-4M15 7h.01" />
+    </svg>
   )
 }
 
@@ -187,10 +207,8 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
   )
 }
 
-// AssetThumb lazily loads an image asset as an object URL and shows a thumbnail.
-function AssetThumb({ asset, onOpen }: { asset: ProjectAsset; onOpen: () => void }) {
+function ImageTile({ asset, onOpen }: { asset: ProjectAsset; onOpen: () => void }) {
   const [url, setUrl] = useState<string | null>(null)
-
   useEffect(() => {
     let revoked = false
     let objectURL = ''
@@ -203,17 +221,15 @@ function AssetThumb({ asset, onOpen }: { asset: ProjectAsset; onOpen: () => void
   }, [asset.id])
 
   return (
-    <button className="asset-thumb" onClick={onOpen} title={asset.name}>
-      {url ? <img src={url} alt={asset.name} /> : <span className="c-faint" style={{ fontSize: 11 }}>…</span>}
-      <span className="asset-name">{asset.name}</span>
+    <button className="tile" onClick={onOpen} title={asset.name}>
+      <div className="tile-art">{url ? <img src={url} alt={asset.name} /> : <span className="c-faint" style={{ fontSize: 11 }}>…</span>}</div>
+      <div className="tile-name truncate">{asset.name}</div>
     </button>
   )
 }
 
-// AssetViewer renders an image asset full-screen. (iBOM assets go to IBomViewer.)
-function AssetViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => void }) {
+function ImageViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => void }) {
   const [url, setUrl] = useState<string | null>(null)
-
   useEffect(() => {
     let revoked = false
     let objectURL = ''
@@ -240,117 +256,4 @@ function AssetViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => v
       </div>
     </div>
   )
-}
-
-// BoardCard loads a board's full BOM and shows it with inventory match status.
-// A panel board multiplies per-board quantities by its (editable) copy count.
-function BoardCard({ board, onChanged }: { board: Board; onChanged: () => void }) {
-  const [full, setFull] = useState<Board | null>(null)
-  const isPanel = board.kind === 'panel'
-  const copies = board.copies || 1
-
-  const load = useCallback(() => {
-    api.getBoard(board.id).then(setFull).catch(() => setFull(null))
-  }, [board.id])
-
-  useEffect(load, [load])
-  useRealtime(['parts'], load)
-
-  const lines = full?.lines ?? []
-  const matched = lines.filter((l) => l.match_kind !== 'none').length
-  const totalParts = lines.reduce((s, l) => s + l.quantity, 0) * copies
-
-  const setCopies = async (n: number) => {
-    if (n < 1 || n === copies) return
-    await api.updateBoard(board.id, { copies: n }).catch(() => undefined)
-    onChanged()
-  }
-
-  const del = async () => {
-    if (!confirm(`Remove board "${board.name}"?`)) return
-    await api.deleteBoard(board.id).catch(() => undefined)
-    onChanged()
-  }
-
-  return (
-    <section className="card">
-      <div className="card-h">
-        <div className="min-w-0">
-          <span className="eyebrow">{isPanel ? 'Panel' : 'Board'}</span>
-          <h2 style={{ marginTop: 1 }}>{board.name}</h2>
-        </div>
-        <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
-          {isPanel && (
-            <label className="flex items-center gap-1 c-dim" style={{ fontSize: 12 }} title="Copies of the board in this panel">
-              <input
-                type="number"
-                min={1}
-                defaultValue={copies}
-                onBlur={(e) => setCopies(parseInt(e.target.value, 10) || 1)}
-                className="input"
-                style={{ width: 56, padding: '4px 6px', textAlign: 'center' }}
-              />
-              -up
-            </label>
-          )}
-          {board.source_filename && <span className="tag mono" style={{ fontSize: 11 }}>{board.source_filename}</span>}
-          <span className="pill ghost">{lines.length} lines · {num(totalParts)} parts</span>
-          <span className={`pill ${matched === lines.length && lines.length > 0 ? 'ok' : 'low'}`}>
-            {matched}/{lines.length} matched
-          </span>
-          <button onClick={del} className="btn sm danger">Remove</button>
-        </div>
-      </div>
-
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th style={{ width: 52 }} className="num">Qty</th>
-            <th>References</th>
-            <th>Value</th>
-            <th>Footprint</th>
-            <th>MPN</th>
-            <th>Inventory</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lines.length === 0 && (
-            <tr><td colSpan={6} className="c-faint" style={{ textAlign: 'center', padding: 20 }}>No BOM lines parsed.</td></tr>
-          )}
-          {lines.map((l) => <BomRow key={l.id} line={l} copies={copies} />)}
-        </tbody>
-      </table>
-    </section>
-  )
-}
-
-function BomRow({ line, copies }: { line: BOMLine; copies: number }) {
-  return (
-    <tr>
-      <td className="num c-text">
-        {line.quantity * copies}
-        {copies > 1 && <span className="c-faint" style={{ fontSize: 10 }}> ({line.quantity}×{copies})</span>}
-      </td>
-      <td className="mono c-dim" style={{ fontSize: 12 }}>{line.refs}</td>
-      <td className="c-text">{line.value || <span className="c-faint">—</span>}</td>
-      <td className="mono c-faint" style={{ fontSize: 11.5 }}>{shortFootprint(line.footprint)}</td>
-      <td className="mono c-faint" style={{ fontSize: 11.5 }}>{line.mpn || '—'}</td>
-      <td>
-        {line.part_id ? (
-          <Link to={`/parts/${line.part_id}`} className="pill ok" style={{ whiteSpace: 'nowrap' }}>
-            {line.part_name} ↗
-          </Link>
-        ) : (
-          <span className="pill low" style={{ whiteSpace: 'nowrap' }}>no match</span>
-        )}
-      </td>
-    </tr>
-  )
-}
-
-// shortFootprint trims the KiCad library prefix ("Resistor_SMD:R_0603…" → "R_0603…").
-function shortFootprint(fp: string): string {
-  if (!fp) return '—'
-  const i = fp.indexOf(':')
-  return i >= 0 ? fp.slice(i + 1) : fp
 }

@@ -12,6 +12,7 @@ import { PartDetailPage } from './pages/PartDetailPage'
 import { LocationsPage } from './pages/LocationsPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
+import { BoardDetailPage } from './pages/BoardDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
 
 export function App() {
@@ -26,6 +27,7 @@ export function App() {
           <Route path="locations" element={<LocationsPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
+          <Route path="projects/:projectId/boards/:boardId" element={<BoardDetailPage />} />
           <Route path="tokens" element={<TokensPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

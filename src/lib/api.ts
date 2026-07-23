@@ -153,6 +153,37 @@ export interface BOMLine {
   position: number
 }
 
+export interface PickEntry {
+  stock_item_id: string
+  part_id: string
+  part_name: string
+  location_id?: string
+  location_name: string
+  quantity: number
+}
+export interface PickShortfall {
+  part_id: string
+  part_name: string
+  required: number
+  available: number
+  short: number
+}
+export interface PickUnmatched {
+  refs: string
+  value: string
+  quantity: number
+}
+export interface PickList {
+  board_id: string
+  board_name: string
+  quantity: number
+  copies: number
+  total_units: number
+  entries: PickEntry[]
+  shortfalls: PickShortfall[]
+  unmatched: PickUnmatched[]
+}
+
 export interface Part {
   id: string
   category_id?: string
@@ -565,6 +596,9 @@ export const api = {
   },
   getBoard(id: string) {
     return request<Board>(`/boards/${id}`)
+  },
+  getPickList(boardID: string, quantity: number) {
+    return request<PickList>(`/boards/${boardID}/pick-list?quantity=${quantity}`)
   },
   uploadBoardAsset(boardID: string, file: File) {
     const form = new FormData()

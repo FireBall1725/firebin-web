@@ -8,6 +8,7 @@ import { useRealtime } from '../lib/useRealtime'
 import { num } from '../lib/format'
 import { IBomViewer } from '../components/IBomViewer'
 import { BoardThumb } from '../components/BoardThumb'
+import { ImageTile, ImageViewer } from '../components/AssetImage'
 
 type Tab = 'info' | 'bom' | 'layout'
 
@@ -16,6 +17,7 @@ export function BoardDetailPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [board, setBoard] = useState<Board | null>(null)
   const [ibom, setIbom] = useState<ProjectAsset | null>(null)
+  const [images, setImages] = useState<ProjectAsset[]>([])
   const [notFound, setNotFound] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const raw = searchParams.get('tab')
@@ -31,13 +33,13 @@ export function BoardDetailPage() {
     api.getProject(projectId).then(setProject).catch(() => undefined)
     api
       .listProjectAssets(projectId)
-      .then((as) =>
+      .then((as) => {
+        const mine = as.filter((a) => a.board_id === boardId)
         setIbom(
-          as.find((a) => a.kind === 'ibom' && a.board_id === boardId) ??
-            as.find((a) => a.kind === 'pcbrender' && a.board_id === boardId) ??
-            null,
-        ),
-      )
+          mine.find((a) => a.kind === 'ibom') ?? mine.find((a) => a.kind === 'pcbrender') ?? null,
+        )
+        setImages(mine.filter((a) => a.kind === 'image'))
+      })
       .catch(() => undefined)
   }, [projectId, boardId, reload])
 
@@ -86,7 +88,7 @@ export function BoardDetailPage() {
         <button className={`tab ${tab === 'layout' ? 'on' : ''}`} onClick={() => setTab('layout')}>Board layout</button>
       </div>
 
-      {tab === 'info' && <InfoTab board={board} ibom={ibom} matched={matched} totalParts={totalParts} />}
+      {tab === 'info' && <InfoTab board={board} ibom={ibom} images={images} matched={matched} totalParts={totalParts} />}
       {tab === 'bom' && <BomTab board={board} copies={copies} onChanged={reload} />}
       {tab === 'layout' && (
         <div>
@@ -108,9 +110,10 @@ export function BoardDetailPage() {
   )
 }
 
-function InfoTab({ board, ibom, matched, totalParts }: { board: Board; ibom: ProjectAsset | null; matched: number; totalParts: number }) {
+function InfoTab({ board, ibom, images, matched, totalParts }: { board: Board; ibom: ProjectAsset | null; images: ProjectAsset[]; matched: number; totalParts: number }) {
   const lines = board.lines ?? []
   const [big, setBig] = useState(false)
+  const [viewImage, setViewImage] = useState<ProjectAsset | null>(null)
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0, 320px) 1fr' }}>
       <div className="card" style={{ padding: 12 }}>
@@ -160,6 +163,18 @@ function InfoTab({ board, ibom, matched, totalParts }: { board: Board; ibom: Pro
           </tbody>
         </table>
       </div>
+
+      {images.length > 0 && (
+        <div className="card" style={{ gridColumn: '1 / -1' }}>
+          <div className="card-h"><h2>Renders</h2></div>
+          <div className="tiles" style={{ padding: 12 }}>
+            {images.map((a) => (
+              <ImageTile key={a.id} asset={a} onOpen={() => setViewImage(a)} />
+            ))}
+          </div>
+        </div>
+      )}
+      {viewImage && <ImageViewer asset={viewImage} onClose={() => setViewImage(null)} />}
     </div>
   )
 }

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ScanModal } from './ScanModal'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { PartFormModal } from './PartForm'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { api, type Category } from '../lib/api'
 
 type NavDef = { to: string; label: string; end?: boolean; icon: React.ReactNode }
 
@@ -36,9 +38,18 @@ function currentTheme(): 'light' | 'dark' {
 export function Layout() {
   const { user, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [sideOpen, setSideOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [categories, setCategories] = useState<Category[]>([])
   const [theme, setTheme] = useState<'light' | 'dark'>(currentTheme)
+
+  // Categories power the manual "Add item" form; load once for the whole shell.
+  useEffect(() => {
+    api.listCategories().then(setCategories).catch(() => setCategories([]))
+  }, [])
 
   const [eyebrow, title] = crumbFor(location.pathname)
 
@@ -114,10 +125,48 @@ export function Layout() {
             <span className="kbd">/</span>
           </div>
 
-          <button className="scan-btn" onClick={() => setScanOpen(true)}>
-            {icon('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8')}
-            Scan
-          </button>
+          <div className="scan-split">
+            <button className="scan-btn" onClick={() => setScanOpen(true)}>
+              {icon('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8')}
+              Scan
+            </button>
+            <button
+              className="scan-caret"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="More add options"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              {icon('M6 9l6 6 6-6')}
+            </button>
+            {menuOpen && (
+              <>
+                <div className="menu-scrim" onClick={() => setMenuOpen(false)} />
+                <div className="scan-menu" role="menu">
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setScanOpen(true)
+                    }}
+                  >
+                    {icon('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8')}
+                    Scan barcode
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setAddOpen(true)
+                    }}
+                  >
+                    {icon('M12 5v14M5 12h14')}
+                    Add item manually
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === 'dark'
               ? icon('M12 3v2M12 19v2M5 5l1.5 1.5M17.5 17.5L19 19M3 12h2M19 12h2M5 19l1.5-1.5M17.5 6.5L19 5M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8')
@@ -133,6 +182,16 @@ export function Layout() {
       </div>
 
       {scanOpen && <ScanModal onClose={() => setScanOpen(false)} />}
+      {addOpen && (
+        <PartFormModal
+          categories={categories}
+          onClose={() => setAddOpen(false)}
+          onCreated={(id) => {
+            setAddOpen(false)
+            navigate(`/parts/${id}`)
+          }}
+        />
+      )}
     </div>
   )
 }

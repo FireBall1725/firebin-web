@@ -200,6 +200,25 @@ function drawSilk(ctx: CanvasRenderingContext2D, d: Drawing) {
     ctx.stroke(new Path2D(d.svgpath))
     return
   }
+  if (t === 'text' && typeof d.text === 'string') {
+    // Generated (pcbrender) silk text — draw with canvas at board-mm size.
+    const pos = (d.pos as number[]) || [0, 0]
+    const size = (d.size as number) || 1
+    const hj = (d.justify as string) || 'center'
+    const vj = (d.vjustify as string) || 'center'
+    ctx.save()
+    ctx.translate(pos[0], pos[1])
+    ctx.rotate((-(d.angle as number) * Math.PI) / 180)
+    ctx.font = `${size}px sans-serif`
+    ctx.textAlign = hj === 'left' ? 'left' : hj === 'right' ? 'right' : 'center'
+    ctx.textBaseline = vj === 'top' ? 'top' : vj === 'bottom' ? 'bottom' : 'middle'
+    const lines = d.text.split('\n')
+    const lh = size * 1.15
+    const y0 = (-(lines.length - 1) / 2) * lh
+    lines.forEach((ln, i) => ctx.fillText(ln, 0, y0 + i * lh))
+    ctx.restore()
+    return
+  }
   if (t === 'polygon' && Array.isArray(d.polygons)) {
     const pos = (d.pos as number[]) || [0, 0]
     const angle = ((d.angle as number) || 0) * (Math.PI / 180)

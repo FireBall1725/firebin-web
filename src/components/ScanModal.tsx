@@ -271,6 +271,46 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// Common part families mapped to a clean, pluralized category name. Octopart's
+// raw category ("Multilayer Ceramic Capacitors MLCC") is too specific to store,
+// so we collapse it to a tidy bucket.
+const CATEGORY_FAMILIES: [RegExp, string][] = [
+  [/capacitor/i, 'Capacitors'],
+  [/resistor/i, 'Resistors'],
+  [/inductor|choke/i, 'Inductors'],
+  [/ferrite/i, 'Ferrite Beads'],
+  [/\bled\b/i, 'LEDs'],
+  [/diode/i, 'Diodes'],
+  [/transistor|mosfet|\bbjt\b/i, 'Transistors'],
+  [/crystal|resonator/i, 'Crystals'],
+  [/oscillator/i, 'Oscillators'],
+  [/regulator|\bpmic\b|\bldo\b/i, 'Voltage Regulators'],
+  [/microcontroller|\bmcu\b/i, 'Microcontrollers'],
+  [/connector|header|socket|\bjack\b/i, 'Connectors'],
+  [/switch/i, 'Switches'],
+  [/relay/i, 'Relays'],
+  [/fuse/i, 'Fuses'],
+  [/module/i, 'Modules'],
+  [/sensor/i, 'Sensors'],
+]
+
+// suggestCategory turns an enriched category string into a category name to
+// pre-fill: first an existing category whose base word appears in it (so we
+// reuse "Capacitors" rather than making a near-duplicate), then a known family,
+// else blank for the user to type.
+function suggestCategory(enrichedCat: string, existing: Category[]): string {
+  const c = enrichedCat.toLowerCase()
+  if (!c) return ''
+  for (const cat of existing) {
+    const base = cat.name.toLowerCase().replace(/s$/, '')
+    if (base.length > 2 && c.includes(base)) return cat.name
+  }
+  for (const [re, label] of CATEGORY_FAMILIES) {
+    if (re.test(enrichedCat)) return label
+  }
+  return ''
+}
+
 // decodedCard renders the read-only "what the barcode said" summary shown above
 // both the match and create branches.
 function decodedCard(parsed: ScanResult['parsed'], style?: React.CSSProperties) {
@@ -365,6 +405,7 @@ function ScanResultView({
 
   const draft: PartDraft = {
     name: enriched?.name ?? '',
+    category: suggestCategory(enriched?.category || '', categories),
     package: enriched?.package || '',
     description: enriched?.description || '',
     parameters: enriched?.parameters?.map((p) => ({ name: p.name, value: p.value, units: p.units })) ?? [],

@@ -56,6 +56,12 @@ export interface PartParameter {
   value: string
 }
 
+export interface ParameterTemplate {
+  id: string
+  name: string
+  units?: string
+}
+
 export interface Part {
   id: string
   category_id?: string
@@ -406,6 +412,9 @@ export const api = {
   },
 
   // ── Parts ───────────────────────────────────────────────────────────────────
+  listParameterTemplates() {
+    return request<ParameterTemplate[]>('/parameter-templates')
+  },
   listParts(opts: { search?: string; category?: string; topLevel?: boolean } = {}) {
     const q = new URLSearchParams()
     if (opts.search) q.set('search', opts.search)

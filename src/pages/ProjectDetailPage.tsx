@@ -253,8 +253,11 @@ function AssetViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => v
 }
 
 // BoardCard loads a board's full BOM and shows it with inventory match status.
+// A panel board multiplies per-board quantities by its (editable) copy count.
 function BoardCard({ board, onChanged }: { board: Board; onChanged: () => void }) {
   const [full, setFull] = useState<Board | null>(null)
+  const isPanel = board.kind === 'panel'
+  const copies = board.copies || 1
 
   const load = useCallback(() => {
     api.getBoard(board.id).then(setFull).catch(() => setFull(null))
@@ -265,7 +268,13 @@ function BoardCard({ board, onChanged }: { board: Board; onChanged: () => void }
 
   const lines = full?.lines ?? []
   const matched = lines.filter((l) => l.match_kind !== 'none').length
-  const totalParts = lines.reduce((s, l) => s + l.quantity, 0)
+  const totalParts = lines.reduce((s, l) => s + l.quantity, 0) * copies
+
+  const setCopies = async (n: number) => {
+    if (n < 1 || n === copies) return
+    await api.updateBoard(board.id, { copies: n }).catch(() => undefined)
+    onChanged()
+  }
 
   const del = async () => {
     if (!confirm(`Remove board "${board.name}"?`)) return
@@ -277,10 +286,23 @@ function BoardCard({ board, onChanged }: { board: Board; onChanged: () => void }
     <section className="card">
       <div className="card-h">
         <div className="min-w-0">
-          <span className="eyebrow">Board</span>
+          <span className="eyebrow">{isPanel ? 'Panel' : 'Board'}</span>
           <h2 style={{ marginTop: 1 }}>{board.name}</h2>
         </div>
         <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
+          {isPanel && (
+            <label className="flex items-center gap-1 c-dim" style={{ fontSize: 12 }} title="Copies of the board in this panel">
+              <input
+                type="number"
+                min={1}
+                defaultValue={copies}
+                onBlur={(e) => setCopies(parseInt(e.target.value, 10) || 1)}
+                className="input"
+                style={{ width: 56, padding: '4px 6px', textAlign: 'center' }}
+              />
+              -up
+            </label>
+          )}
           {board.source_filename && <span className="tag mono" style={{ fontSize: 11 }}>{board.source_filename}</span>}
           <span className="pill ghost">{lines.length} lines · {num(totalParts)} parts</span>
           <span className={`pill ${matched === lines.length && lines.length > 0 ? 'ok' : 'low'}`}>
@@ -293,7 +315,7 @@ function BoardCard({ board, onChanged }: { board: Board; onChanged: () => void }
       <table className="tbl">
         <thead>
           <tr>
-            <th style={{ width: 44 }} className="num">Qty</th>
+            <th style={{ width: 52 }} className="num">Qty</th>
             <th>References</th>
             <th>Value</th>
             <th>Footprint</th>
@@ -305,17 +327,20 @@ function BoardCard({ board, onChanged }: { board: Board; onChanged: () => void }
           {lines.length === 0 && (
             <tr><td colSpan={6} className="c-faint" style={{ textAlign: 'center', padding: 20 }}>No BOM lines parsed.</td></tr>
           )}
-          {lines.map((l) => <BomRow key={l.id} line={l} />)}
+          {lines.map((l) => <BomRow key={l.id} line={l} copies={copies} />)}
         </tbody>
       </table>
     </section>
   )
 }
 
-function BomRow({ line }: { line: BOMLine }) {
+function BomRow({ line, copies }: { line: BOMLine; copies: number }) {
   return (
     <tr>
-      <td className="num c-text">{line.quantity}</td>
+      <td className="num c-text">
+        {line.quantity * copies}
+        {copies > 1 && <span className="c-faint" style={{ fontSize: 10 }}> ({line.quantity}×{copies})</span>}
+      </td>
       <td className="mono c-dim" style={{ fontSize: 12 }}>{line.refs}</td>
       <td className="c-text">{line.value || <span className="c-faint">—</span>}</td>
       <td className="mono c-faint" style={{ fontSize: 11.5 }}>{shortFootprint(line.footprint)}</td>

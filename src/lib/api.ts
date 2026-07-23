@@ -79,6 +79,8 @@ export interface Board {
   description?: string
   source_filename?: string
   source_format: string
+  kind: 'board' | 'panel'
+  copies: number
   position: number
   lines?: BOMLine[]
   line_count: number
@@ -504,6 +506,9 @@ export const api = {
   },
   getBoard(id: string) {
     return request<Board>(`/boards/${id}`)
+  },
+  updateBoard(id: string, body: { name?: string; copies?: number }) {
+    return request<Board>(`/boards/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
   },
   deleteBoard(id: string) {
     return request<{ status: string }>(`/boards/${id}`, { method: 'DELETE' })

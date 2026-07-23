@@ -206,8 +206,12 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
                 <path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
               </svg>
               <div className="dz-title">{busy ? 'Reading…' : dragging ? 'Drop to read' : 'Drag a KiCad file here, or click to browse'}</div>
-              <div className="dz-sub">
-                A zipped KiCad project <span className="mono">.zip</span> (best; merges sheets and pulls in renders + the interactive BOM), a schematic <span className="mono">.kicad_sch</span> or board <span className="mono">.kicad_pcb</span>, or a BOM export <span className="mono">.csv</span> / <span className="mono">.xlsx</span> (EasyEDA, JLCPCB, LCSC). The BOM comes from the schematic when both are present.
+              <div className="dz-sub" style={{ textAlign: 'left', maxWidth: 440, lineHeight: 1.7 }}>
+                <div><span className="mono">.zip</span> full KiCad project → BOM + interactive layout + renders <span className="c-faint">(best; BOM from the schematic)</span></div>
+                <div><span className="mono">.kicad_pcb</span> board → BOM + a layout FireBin renders</div>
+                <div><span className="mono">.kicad_sch</span> schematic → BOM only, no layout</div>
+                <div><span className="mono">.csv</span> / <span className="mono">.xlsx</span> BOM export (EasyEDA, JLCPCB, LCSC) → BOM only</div>
+                <div className="c-faint" style={{ marginTop: 6 }}>Layouts also come from an Interactive HTML BOM; add or replace one anytime from a board's Files.</div>
               </div>
               <input
                 ref={inputRef}

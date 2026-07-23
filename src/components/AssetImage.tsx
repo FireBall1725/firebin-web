@@ -39,6 +39,13 @@ export function ImageTile({ asset, onOpen }: { asset: ProjectAsset; onOpen: () =
   )
 }
 
+// AssetThumb renders just the image of an asset (no tile chrome), for embedding
+// in a custom tile.
+export function AssetThumb({ asset }: { asset: ProjectAsset }) {
+  const url = useAssetURL(asset.id)
+  return url ? <img src={url} alt={asset.name} /> : <span className="c-faint" style={{ fontSize: 11 }}>…</span>
+}
+
 // ImageViewer is a full-size lightbox for an image asset.
 export function ImageViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => void }) {
   const url = useAssetURL(asset.id)

@@ -15,6 +15,7 @@ export function ProjectDetailPage() {
   const [assets, setAssets] = useState<ProjectAsset[]>([])
   const [notFound, setNotFound] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
+  const [showNewBoard, setShowNewBoard] = useState(false)
   const [viewingImage, setViewingImage] = useState<ProjectAsset | null>(null)
   const [viewingIbom, setViewingIbom] = useState<ProjectAsset | null>(null)
 
@@ -63,6 +64,10 @@ export function ProjectDetailPage() {
           {project.description && <p className="c-dim" style={{ fontSize: 13.5, margin: 0 }}>{project.description}</p>}
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowNewBoard(true)} className="btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+            New board
+          </button>
           <button onClick={() => setShowUpload(true)} className="btn primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
             Upload
@@ -119,6 +124,13 @@ export function ProjectDetailPage() {
 
       {showUpload && (
         <UploadModal projectID={project.id} onClose={() => setShowUpload(false)} onDone={reload} />
+      )}
+      {showNewBoard && (
+        <NewBoardModal
+          projectID={project.id}
+          onClose={() => setShowNewBoard(false)}
+          onCreated={(id) => navigate(`/projects/${project.id}/boards/${id}`)}
+        />
       )}
       {viewingIbom && <IBomViewer asset={viewingIbom} onClose={() => setViewingIbom(null)} showPlaced={false} />}
       {viewingImage && <ImageViewer asset={viewingImage} onClose={() => setViewingImage(null)} />}
@@ -283,6 +295,57 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
             </div>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// NewBoardModal creates an empty board to build a BOM by hand (no upload).
+function NewBoardModal({ projectID, onClose, onCreated }: { projectID: string; onClose: () => void; onCreated: (id: string) => void }) {
+  const [name, setName] = useState('')
+  const [revision, setRevision] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const create = async () => {
+    if (!name.trim()) {
+      setError('Name is required')
+      return
+    }
+    setBusy(true)
+    try {
+      const b = await api.createBlankBoard(projectID, { name: name.trim(), revision: revision.trim() || undefined })
+      onCreated(b.id)
+    } catch {
+      setError('Could not create board')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-h">
+          <h3>New board</h3>
+          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="modal-b space-y-3">
+          <label className="fieldlabel"><span>Board name</span>
+            <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="e.g. Controller board" />
+          </label>
+          <label className="fieldlabel"><span>Revision (optional)</span>
+            <input className="input" value={revision} onChange={(e) => setRevision(e.target.value)} placeholder="A" />
+          </label>
+          <p className="c-faint" style={{ fontSize: 12 }}>You'll add BOM lines by hand. Upload a KiCad project later to get the board layout and renders.</p>
+          {error && <p className="c-crit text-sm">{error}</p>}
+        </div>
+        <div className="modal-f">
+          <button onClick={onClose} className="btn">Cancel</button>
+          <button onClick={create} disabled={busy} className="btn primary">{busy ? '…' : 'Create board'}</button>
+        </div>
       </div>
     </div>
   )

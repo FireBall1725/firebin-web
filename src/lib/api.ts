@@ -110,6 +110,16 @@ export interface BoardPreview {
   renders: string[]
 }
 
+export interface BOMLineInput {
+  refs?: string
+  quantity: number
+  value?: string
+  footprint?: string
+  mpn?: string
+  manufacturer?: string
+  description?: string
+}
+
 export interface UploadBoardOpts {
   name?: string
   revision?: string
@@ -521,6 +531,18 @@ export const api = {
     const form = new FormData()
     form.append('file', file)
     return request<BoardPreview>(`/projects/${projectID}/boards/preview`, { method: 'POST', body: form })
+  },
+  createBlankBoard(projectID: string, body: { name: string; revision?: string }) {
+    return request<Board>(`/projects/${projectID}/boards/blank`, { method: 'POST', body: JSON.stringify(body) })
+  },
+  addBOMLine(boardID: string, body: BOMLineInput) {
+    return request<BOMLine>(`/boards/${boardID}/lines`, { method: 'POST', body: JSON.stringify(body) })
+  },
+  updateBOMLine(lineID: string, body: BOMLineInput) {
+    return request<BOMLine>(`/lines/${lineID}`, { method: 'PATCH', body: JSON.stringify(body) })
+  },
+  deleteBOMLine(lineID: string) {
+    return request<{ status: string }>(`/lines/${lineID}`, { method: 'DELETE' })
   },
   uploadBoard(projectID: string, file: File, opts: UploadBoardOpts = {}) {
     const form = new FormData()

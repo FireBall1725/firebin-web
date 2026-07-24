@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Part, type Category } from '../lib/api'
 import { PartFormModal } from '../components/PartForm'
-import { num } from '../lib/format'
 import { useRealtime } from '../lib/useRealtime'
+import { usePartsView } from '../lib/prefs'
+import { PartsTable, PartsGrid, PartsListCards } from '../components/PartsViews'
 
 export function PartsPage() {
   const navigate = useNavigate()
+  const view = usePartsView()
   const [parts, setParts] = useState<Part[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [category, setCategory] = useState<string | undefined>(undefined)
   const [search, setSearch] = useState('')
+  const [lowOnly, setLowOnly] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
-  const [expanded, setExpanded] = useState<Record<string, Part[] | 'loading'>>({})
 
   const load = useCallback(() => {
     setLoading(true)
@@ -43,19 +45,22 @@ export function PartsPage() {
     api.listCategories().then(setCategories).catch(() => undefined)
   })
 
-  const toggle = async (p: Part) => {
-    if (expanded[p.id]) {
-      setExpanded((e) => {
-        const next = { ...e }
-        delete next[p.id]
-        return next
-      })
-      return
-    }
-    setExpanded((e) => ({ ...e, [p.id]: 'loading' }))
-    const full = await api.getPart(p.id).catch(() => null)
-    setExpanded((e) => ({ ...e, [p.id]: full?.variants ?? [] }))
-  }
+  const catName = useCallback(
+    (p: Part) => categories.find((c) => c.id === p.category_id)?.name,
+    [categories],
+  )
+
+  // Inline stepper: adjust the part's primary bin (optimistic; SSE reconciles).
+  const adjust = useCallback((p: Part, d: number) => {
+    setParts((prev) => prev.map((x) => (x.id === p.id ? { ...x, total_stock: Math.max(0, x.total_stock + d) } : x)))
+    api
+      .adjustStock(p.id, { kind: d > 0 ? 'add' : 'remove', quantity: 1, location_id: p.primary_location_id ?? null })
+      .catch(load)
+  }, [load])
+
+  const isLow = (p: Part) => p.total_stock <= 0 || (p.minimum_stock > 0 && p.total_stock <= p.minimum_stock)
+  const shown = useMemo(() => (lowOnly ? parts.filter(isLow) : parts), [parts, lowOnly])
+  const open = (p: Part) => navigate(`/parts/${p.id}`)
 
   return (
     <div>
@@ -86,72 +91,32 @@ export function PartsPage() {
           ))}
         </aside>
 
-        {/* Table */}
+        {/* Parts */}
         <div className="min-w-0">
-          <div className="search mb-3" style={{ marginLeft: 0, width: '100%', maxWidth: 'none' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search parts, keywords, MPN…" />
+          <div className="flex items-center gap-2 mb-3">
+            <div className="search" style={{ marginLeft: 0, flex: 1, maxWidth: 'none' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search parts, keywords, MPN…" />
+            </div>
+            <button className={`chipbtn ${lowOnly ? 'on' : ''}`} onClick={() => setLowOnly((v) => !v)}>
+              <span className="pv-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--crit)', display: 'inline-block' }} />
+              Low stock
+            </button>
           </div>
 
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Part / variant</th>
-                  <th>Package</th>
-                  <th className="num">Variants</th>
-                  <th className="num">In stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan={4} className="c-faint" style={{ textAlign: 'center', padding: '32px' }}>
-                      Loading…
-                    </td>
-                  </tr>
-                )}
-                {!loading && parts.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="c-faint" style={{ textAlign: 'center', padding: '32px' }}>
-                      No parts yet. Add your first with “New part”.
-                    </td>
-                  </tr>
-                )}
-                {!loading &&
-                  parts.map((p) => {
-                    const isTemplate = (p.variant_count ?? 0) > 0
-                    const rows = [
-                      <PartRow
-                        key={p.id}
-                        part={p}
-                        isTemplate={isTemplate}
-                        expanded={!!expanded[p.id]}
-                        onToggle={() => toggle(p)}
-                        onOpen={() => navigate(`/parts/${p.id}`)}
-                      />,
-                    ]
-                    const kids = expanded[p.id]
-                    if (kids === 'loading') {
-                      rows.push(
-                        <tr key={p.id + '-l'}>
-                          <td colSpan={4} className="c-faint" style={{ paddingLeft: 40, fontSize: 12 }}>
-                            Loading variants…
-                          </td>
-                        </tr>,
-                      )
-                    } else if (Array.isArray(kids)) {
-                      kids.forEach((v) =>
-                        rows.push(
-                          <PartRow key={v.id} part={v} variant onOpen={() => navigate(`/parts/${v.id}`)} />,
-                        ),
-                      )
-                    }
-                    return rows
-                  })}
-              </tbody>
-            </table>
-          </div>
+          {loading ? (
+            <div className="card"><p className="c-faint" style={{ textAlign: 'center', padding: 40 }}>Loading…</p></div>
+          ) : shown.length === 0 ? (
+            <div className="card"><p className="c-faint" style={{ textAlign: 'center', padding: 40 }}>
+              {parts.length === 0 ? 'No parts yet. Add your first with "New part".' : 'No parts match this filter.'}
+            </p></div>
+          ) : view === 'table' ? (
+            <PartsTable parts={shown} catName={catName} onOpen={open} onAdjust={adjust} />
+          ) : view === 'grid' ? (
+            <PartsGrid parts={shown} catName={catName} onOpen={open} onAdjust={adjust} />
+          ) : (
+            <PartsListCards parts={shown} catName={catName} onOpen={open} onAdjust={adjust} />
+          )}
         </div>
       </div>
 
@@ -166,55 +131,5 @@ export function PartsPage() {
         />
       )}
     </div>
-  )
-}
-
-function PartRow({
-  part,
-  isTemplate,
-  variant,
-  expanded,
-  onToggle,
-  onOpen,
-}: {
-  part: Part
-  isTemplate?: boolean
-  variant?: boolean
-  expanded?: boolean
-  onToggle?: () => void
-  onOpen: () => void
-}) {
-  const low = part.total_stock <= 0 || (part.minimum_stock > 0 && part.total_stock <= part.minimum_stock)
-  return (
-    <tr className={isTemplate ? 'tmpl-row' : 'hoverable'}>
-      <td style={variant ? { paddingLeft: 34 } : undefined}>
-        <div className="flex items-center gap-1.5">
-          {isTemplate ? (
-            <button
-              onClick={onToggle}
-              className="chev"
-              style={{ border: 'none', background: 'none', cursor: 'pointer' }}
-              aria-label={expanded ? 'Collapse' : 'Expand'}
-            >
-              {expanded ? '▾' : '▸'}
-            </button>
-          ) : (
-            <span style={{ display: 'inline-block', width: 14 }} />
-          )}
-          <button onClick={onOpen} className="c-text" style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
-            {part.name}
-          </button>
-        </div>
-      </td>
-      <td>{part.package ? <span className="tag">{part.package}</span> : <span className="c-faint">—</span>}</td>
-      <td className="num c-faint">{isTemplate ? part.variant_count : ''}</td>
-      <td className="num">
-        {isTemplate ? (
-          <span className="c-dim">{num(part.total_stock)}</span>
-        ) : (
-          <span className={low ? 'c-crit' : 'c-text'} style={{ fontWeight: low ? 600 : 400 }}>{num(part.total_stock)}</span>
-        )}
-      </td>
-    </tr>
   )
 }

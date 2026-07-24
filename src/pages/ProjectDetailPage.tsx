@@ -7,6 +7,7 @@ import { api, type Project, type Board, type ProjectAsset, type BoardPreview } f
 import { useRealtime } from '../lib/useRealtime'
 import { BoardThumb } from '../components/BoardThumb'
 import { PartPicker } from '../components/PartPicker'
+import { ProjectFormModal } from '../components/ProjectFormModal'
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams()
@@ -122,64 +123,8 @@ export function ProjectDetailPage() {
         />
       )}
       {showEdit && (
-        <EditProjectModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); reload() }} />
+        <ProjectFormModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); reload() }} />
       )}
-    </div>
-  )
-}
-
-// EditProjectModal edits a project's name, description, and tags.
-function EditProjectModal({ project, onClose, onSaved }: { project: Project; onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState(project.name)
-  const [description, setDescription] = useState(project.description ?? '')
-  const [tags, setTags] = useState(project.tags.join(', '))
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const save = async () => {
-    if (!name.trim()) { setError('Name is required'); return }
-    setBusy(true)
-    setError(null)
-    try {
-      await api.updateProject(project.id, {
-        name: name.trim(),
-        description: description.trim(),
-        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-      })
-      onSaved()
-    } catch {
-      setError('Could not save the project')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-h">
-          <h3>Edit project</h3>
-          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="modal-b space-y-3">
-          <label className="fieldlabel"><span>Name</span>
-            <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
-          </label>
-          <label className="fieldlabel"><span>Description</span>
-            <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
-          </label>
-          <label className="fieldlabel"><span>Tags <span className="c-faint">(comma-separated)</span></span>
-            <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="e.g. wip, client-x, revB" />
-          </label>
-          {error && <p className="c-crit text-sm">{error}</p>}
-        </div>
-        <div className="modal-f">
-          <button onClick={onClose} className="btn">Cancel</button>
-          <button onClick={save} disabled={busy || !name.trim()} className="btn primary">{busy ? '…' : 'Save'}</button>
-        </div>
-      </div>
     </div>
   )
 }

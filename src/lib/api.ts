@@ -566,7 +566,7 @@ export const api = {
   listProjects() {
     return request<Project[]>('/projects')
   },
-  createProject(body: { name: string; description?: string }) {
+  createProject(body: { name: string; description?: string; tags?: string[] }) {
     return request<Project>('/projects', { method: 'POST', body: JSON.stringify(body) })
   },
   getProject(id: string) {

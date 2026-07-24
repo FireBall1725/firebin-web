@@ -69,7 +69,7 @@ function resultText(r: { bytes: Uint8Array; text: string }): string {
   }
 }
 
-export function ScanModal({ onClose }: { onClose: () => void }) {
+export function ScanModal({ onClose, initialCode }: { onClose: () => void; initialCode?: string }) {
   const navigate = useNavigate()
   const videoRef = useRef<HTMLVideoElement>(null)
   const [camError, setCamError] = useState<string | null>(null)
@@ -82,7 +82,7 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
   // tears down only its own stream, so React StrictMode can't leave a
   // detached-but-live stream (green light on, no feed).
   useEffect(() => {
-    if (result) return
+    if (result || initialCode) return // a code was handed in (e.g. a USB scanner) — no camera
     let stopped = false
     let stream: MediaStream | null = null
     let timer: number | undefined
@@ -167,6 +167,17 @@ export function ScanModal({ onClose }: { onClose: () => void }) {
       setBusy(false)
     }
   }
+
+  // A code handed in (e.g. from a USB keyboard-wedge scanner) is processed once
+  // on open, skipping the camera.
+  const started = useRef(false)
+  useEffect(() => {
+    if (initialCode && !started.current) {
+      started.current = true
+      handleCode(initialCode)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCode])
 
   const onFile = async (file: File) => {
     setBusy(true)

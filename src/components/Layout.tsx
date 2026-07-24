@@ -8,6 +8,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { api, type Category } from '../lib/api'
+import { useBarcodeScanner } from '../lib/useBarcodeScanner'
+import { useHardwareScanner } from '../lib/prefs'
 
 type NavDef = { to: string; labelKey: string; end?: boolean; icon: React.ReactNode }
 
@@ -46,10 +48,19 @@ export function Layout() {
   const navigate = useNavigate()
   const [sideOpen, setSideOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  const [scanCode, setScanCode] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [theme, setTheme] = useState<'light' | 'dark'>(currentTheme)
+
+  // A USB keyboard-wedge scanner: a physical scan anywhere opens the scan flow
+  // pre-loaded with the code (paused while the scan modal is already open).
+  const hwScanner = useHardwareScanner()
+  useBarcodeScanner(
+    (code) => { setScanCode(code); setScanOpen(true) },
+    { enabled: hwScanner && !scanOpen },
+  )
 
   // Categories power the manual "Add item" form; load once for the whole shell.
   useEffect(() => {
@@ -186,7 +197,7 @@ export function Layout() {
         </main>
       </div>
 
-      {scanOpen && <ScanModal onClose={() => setScanOpen(false)} />}
+      {scanOpen && <ScanModal initialCode={scanCode ?? undefined} onClose={() => { setScanOpen(false); setScanCode(null) }} />}
       {addOpen && (
         <PartFormModal
           categories={categories}

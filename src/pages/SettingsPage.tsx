@@ -3,11 +3,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { api, type EnrichmentSettings } from '../lib/api'
-import { PARTS_VIEWS, getPartsView, setPartsView, type PartsView } from '../lib/prefs'
+import { PARTS_VIEWS, getPartsView, setPartsView, getHardwareScanner, setHardwareScanner, type PartsView } from '../lib/prefs'
 
 export function SettingsPage() {
   const [partsView, setPV] = useState<PartsView>(getPartsView)
   const pickView = (v: PartsView) => { setPartsView(v); setPV(v) }
+  const [hwScanner, setHw] = useState(getHardwareScanner)
+  const toggleHw = () => { const v = !hwScanner; setHardwareScanner(v); setHw(v) }
   const [s, setS] = useState<EnrichmentSettings | null>(null)
   const [clientID, setClientID] = useState('')
   const [secret, setSecret] = useState('')
@@ -67,6 +69,21 @@ export function SettingsPage() {
           </div>
           <p className="c-faint" style={{ fontSize: 12, marginTop: 10 }}>
             How the Parts page lists items: dense table, card grid, or list cards. Remembered on this device.
+          </p>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-h"><h2>Barcode scanner</h2></div>
+        <div style={{ padding: 16 }}>
+          <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
+            <input type="checkbox" checked={hwScanner} onChange={toggleHw} />
+            <span className="c-text" style={{ fontSize: 13.5 }}>USB scanner (keyboard-wedge)</span>
+          </label>
+          <p className="c-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
+            When on, a USB barcode scanner that types the code and presses Enter (most of them) opens the scan flow
+            automatically from any screen. The webcam Scan button still works either way. Turn off if a scanner ever
+            interferes with typing.
           </p>
         </div>
       </div>

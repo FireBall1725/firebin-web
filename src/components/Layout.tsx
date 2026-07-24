@@ -6,17 +6,18 @@ import { ScanModal } from './ScanModal'
 import { PartFormModal } from './PartForm'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useTranslation } from 'react-i18next'
 import { api, type Category } from '../lib/api'
 
-type NavDef = { to: string; label: string; end?: boolean; icon: React.ReactNode }
+type NavDef = { to: string; labelKey: string; end?: boolean; icon: React.ReactNode }
 
 const nav: NavDef[] = [
-  { to: '/', label: 'Dashboard', end: true, icon: icon('M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z') },
-  { to: '/parts', label: 'Parts', icon: icon('M4 7h16M4 12h16M4 17h16') },
-  { to: '/locations', label: 'Locations', icon: icon('M3 3h18v18H3zM3 9h18M9 9v12') },
-  { to: '/projects', label: 'Projects', icon: icon('M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4M8 8h8v8H8z') },
-  { to: '/tokens', label: 'API Tokens', icon: icon('M15 7a4 4 0 1 0-3.5 6H14v3h3v-3h2l2-2-2-2z M7 13v4h3') },
-  { to: '/settings', label: 'Settings', icon: icon('M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.6 15H4.5a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 11 4.6V4.5a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.1a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.2 1z') },
+  { to: '/', labelKey: 'nav.dashboard', end: true, icon: icon('M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z') },
+  { to: '/parts', labelKey: 'nav.parts', icon: icon('M4 7h16M4 12h16M4 17h16') },
+  { to: '/locations', labelKey: 'nav.locations', icon: icon('M3 3h18v18H3zM3 9h18M9 9v12') },
+  { to: '/projects', labelKey: 'nav.projects', icon: icon('M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4M8 8h8v8H8z') },
+  { to: '/tokens', labelKey: 'nav.apiTokens', icon: icon('M15 7a4 4 0 1 0-3.5 6H14v3h3v-3h2l2-2-2-2z M7 13v4h3') },
+  { to: '/settings', labelKey: 'nav.settings', icon: icon('M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.6 15H4.5a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 11 4.6V4.5a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.1a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.2 1z') },
 ]
 
 // Page title + eyebrow keyed off the current route.
@@ -39,6 +40,7 @@ function currentTheme(): 'light' | 'dark' {
 }
 
 export function Layout() {
+  const { t } = useTranslation()
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -88,12 +90,12 @@ export function Layout() {
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
               {item.icon}
-              {item.label}
+              {t(item.labelKey)}
             </NavLink>
           ))}
           <button className="nav-item" onClick={() => setScanOpen(true)}>
             {icon('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8')}
-            Scan intake
+            {t('nav.scanIntake')}
           </button>
         </nav>
 

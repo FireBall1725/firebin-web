@@ -71,6 +71,8 @@ export interface Project {
   board_count: number
   created_at: string
   updated_at: string
+  cover_asset_id?: string
+  cover_asset_kind?: string
 }
 
 export interface Board {
@@ -577,6 +579,14 @@ export const api = {
   },
   deleteProject(id: string) {
     return request<{ status: string }>(`/projects/${id}`, { method: 'DELETE' })
+  },
+  uploadProjectCover(id: string, file: File) {
+    const form = new FormData()
+    form.append('file', file)
+    return request<ProjectAsset>(`/projects/${id}/cover`, { method: 'POST', body: form })
+  },
+  removeProjectCover(id: string) {
+    return request<{ status: string }>(`/projects/${id}/cover`, { method: 'DELETE' })
   },
   previewBoard(projectID: string, file: File) {
     const form = new FormData()

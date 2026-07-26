@@ -7,7 +7,8 @@ import { readBarcodes, prepareZXingModule, type ReaderOptions } from 'zxing-wasm
 import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'
 import { api, type ScanResult, type StorageLocation, type EnrichedPart, type PriceBreak, type Category, type AdjustKind } from '../lib/api'
 import { num } from '../lib/format'
-import { parseFirebinPartLink, resolveFirebinPart, parseFirebinStockLink, resolveFirebinStock } from '../lib/deepLink'
+import { parseFirebinPartLink, resolveFirebinPart, parseFirebinStockLink, resolveFirebinStock, parseFirebinLocationLink, resolveFirebinLocation } from '../lib/deepLink'
+import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 import { PartForm, type PartDraft, type DraftSupplier } from './PartForm'
 import { icon } from '../lib/icons'
 import { mdiClose, mdiBarcodeScan } from '@mdi/js'
@@ -541,6 +542,25 @@ function MatchView({
     api.listLocations().then(setLocations).catch(() => undefined)
   }, [])
 
+  // A wedge scanner firing a location label on this screen would otherwise type
+  // its barcode into the quantity box. Intercept scans and resolve a known
+  // location as the destination instead; ignore anything that isn't a location
+  // so a stray part or bag scan is harmless. Manual typing is slower than a
+  // scan burst, so the hook leaves it alone.
+  useBarcodeScanner(async (code) => {
+    const link = parseFirebinLocationLink(code)
+    let loc: StorageLocation | null = null
+    try {
+      loc = link != null ? await resolveFirebinLocation(link) : await api.scanLocation(code)
+    } catch {
+      loc = null
+    }
+    if (!loc) return
+    const resolved = loc
+    setLocations((prev) => (prev.some((l) => l.id === resolved.id) ? prev : [...prev, resolved]))
+    setLocationID(resolved.id)
+  })
+
   const apply = async () => {
     const q = parseFloat(qty)
     if (isNaN(q) || q < 0) return
@@ -571,7 +591,7 @@ function MatchView({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="fieldlabel"><span>{kind === 'count' ? 'Counted quantity' : 'Quantity'}</span>
-          <input type="number" className="input" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" autoFocus />
+          <input type="number" className="input" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
         </label>
         <label className="fieldlabel"><span>Location</span>
           <select className="input" value={locationID} onChange={(e) => setLocationID(e.target.value)}>

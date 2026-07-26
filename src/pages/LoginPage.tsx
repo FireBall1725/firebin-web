@@ -2,7 +2,7 @@
 // Copyright (C) 2026 FireBall1725
 
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../lib/api'
 import { FireBinIcon } from '../components/FireBinIcon'
@@ -31,13 +31,16 @@ function useRotatingTagline(intervalMs = 4500): number {
 }
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, setupRequired } = useAuth()
   const navigate = useNavigate()
   const tagline = useRotatingTagline()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // Fresh install with no accounts yet: send them to the setup wizard instead.
+  if (setupRequired) return <Navigate to="/setup" replace />
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()

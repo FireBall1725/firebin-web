@@ -17,6 +17,9 @@ interface AuthState {
   // mutation (RequireWriter middleware). The UI uses it to hide write controls
   // rather than let a viewer click a button that would 403.
   canWrite: boolean
+  // setupRequired is true on a fresh install with no accounts yet. It drives the
+  // first-run wizard: the first account created becomes the instance admin.
+  setupRequired: boolean
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, email?: string) => Promise<void>
   logout: () => Promise<void>
@@ -27,14 +30,22 @@ const AuthContext = createContext<AuthState | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [setupRequired, setSetupRequired] = useState(false)
 
   // On mount, if we hold a token, resolve the current user (this also exercises
-  // the refresh path if the access token has expired).
+  // the refresh path if the access token has expired). With no token, check
+  // whether the instance still needs its first account so we can show the wizard.
   useEffect(() => {
     let active = true
     if (!tokenStore.access) {
-      setLoading(false)
-      return
+      api
+        .getSetupStatus()
+        .then((s) => active && setSetupRequired(s.setup_required))
+        .catch(() => undefined)
+        .finally(() => active && setLoading(false))
+      return () => {
+        active = false
+      }
     }
     api
       .me()
@@ -56,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (username: string, password: string, email?: string) => {
     const pair = await api.register(username, password, email)
+    setSetupRequired(false)
     setUser(pair.user)
   }
 
@@ -67,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canWrite = user != null && user.role !== 'viewer'
 
   return (
-    <AuthContext.Provider value={{ user, loading, canWrite, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, canWrite, setupRequired, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   )

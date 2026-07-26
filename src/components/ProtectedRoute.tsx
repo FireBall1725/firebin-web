@@ -5,7 +5,7 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 
 export function ProtectedRoute() {
-  const { user, loading } = useAuth()
+  const { user, loading, setupRequired } = useAuth()
   if (loading) {
     return (
       <div className="bg-app c-faint flex min-h-screen items-center justify-center">
@@ -13,6 +13,6 @@ export function ProtectedRoute() {
       </div>
     )
   }
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <Navigate to={setupRequired ? '/setup' : '/login'} replace />
   return <Outlet />
 }

@@ -13,6 +13,10 @@ import { api, tokenStore, type User } from '../lib/api'
 interface AuthState {
   user: User | null
   loading: boolean
+  // canWrite is false for viewer-role accounts, which the API rejects on any
+  // mutation (RequireWriter middleware). The UI uses it to hide write controls
+  // rather than let a viewer click a button that would 403.
+  canWrite: boolean
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, email?: string) => Promise<void>
   logout: () => Promise<void>
@@ -60,8 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
+  const canWrite = user != null && user.role !== 'viewer'
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, canWrite, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   )

@@ -8,6 +8,9 @@ import './index.css'
 import './i18n'
 import { App } from './App.tsx'
 import { AuthProvider } from './auth/AuthContext.tsx'
+import { initTheme } from './lib/themes'
+
+initTheme() // apply the saved theme before first paint
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

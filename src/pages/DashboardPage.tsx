@@ -111,24 +111,40 @@ export function DashboardPage() {
           </div>
           {recent.length > 0 ? (
             <div>
-              {recent.map((t) => (
-                <div key={t.id} className="flex items-center justify-between px-4 py-2.5 bd-b">
-                  <span className="min-w-0 truncate text-sm">
-                    {t.part_id ? (
-                      <Link to={`/parts/${t.part_id}`} className="c-text">
-                        {t.part_name}
-                      </Link>
+              {recent.map((t) => {
+                const isMove = t.kind === 'move'
+                const from = t.from_location_name || 'Unassigned'
+                const to = t.to_location_name || 'Unassigned'
+                return (
+                  <div key={t.id} className="flex items-center justify-between px-4 py-2.5 bd-b">
+                    <span className="min-w-0 truncate text-sm">
+                      {t.part_id ? (
+                        <Link to={`/parts/${t.part_id}`} className="c-text">
+                          {t.part_name}
+                        </Link>
+                      ) : (
+                        <span className="c-text">{t.part_name}</span>
+                      )}
+                      <span className="mono" style={{ marginLeft: 8, fontSize: 11, textTransform: 'uppercase', color: 'var(--faint)' }}>{t.kind}</span>
+                      {isMove && (
+                        <span className="mono" style={{ marginLeft: 8, fontSize: 11, color: 'var(--dim)' }}>
+                          {from} → {to}
+                        </span>
+                      )}
+                    </span>
+                    {isMove ? (
+                      <span className="mono shrink-0 c-dim" style={{ fontSize: 12, marginLeft: 12 }}>
+                        {num(Math.abs(t.delta))}
+                      </span>
                     ) : (
-                      <span className="c-text">{t.part_name}</span>
+                      <span className={`mono shrink-0 ${t.delta >= 0 ? 'c-good' : 'c-crit'}`} style={{ fontSize: 12, marginLeft: 12 }}>
+                        {t.delta >= 0 ? '+' : ''}
+                        {num(t.delta)}
+                      </span>
                     )}
-                    <span className="mono" style={{ marginLeft: 8, fontSize: 11, textTransform: 'uppercase', color: 'var(--faint)' }}>{t.kind}</span>
-                  </span>
-                  <span className={`mono shrink-0 ${t.delta >= 0 ? 'c-good' : 'c-crit'}`} style={{ fontSize: 12, marginLeft: 12 }}>
-                    {t.delta >= 0 ? '+' : ''}
-                    {num(t.delta)}
-                  </span>
-                </div>
-              ))}
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <div className="p-4">

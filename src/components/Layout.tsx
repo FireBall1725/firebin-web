@@ -1,25 +1,49 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ScanModal } from './ScanModal'
+import { ScanActionMenu } from './ScanActionMenu'
+import { BatchScanModal } from './BatchScanModal'
+import { LotActionMenu } from './LotActionMenu'
+import { FireBinIcon } from './FireBinIcon'
+import { CommandPalette } from './CommandPalette'
+import { AppFooter } from './AppFooter'
+import { icon } from '../lib/icons'
 import { PartFormModal } from './PartForm'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { api, type Category } from '../lib/api'
+import { parseFirebinPartLink, resolveFirebinPart, parseFirebinLocationLink, resolveFirebinLocation, parseFirebinStockLink, resolveFirebinStock } from '../lib/deepLink'
+import {
+  mdiViewDashboardOutline,
+  mdiFormatListBulletedSquare,
+  mdiMapMarkerOutline,
+  mdiFolderOutline,
+  mdiCogOutline,
+  mdiMenu,
+  mdiMagnify,
+  mdiBarcodeScan,
+  mdiChevronDown,
+  mdiCameraOutline,
+  mdiPlus,
+  mdiFormatListChecks,
+  mdiWhiteBalanceSunny,
+  mdiWeatherNight,
+} from '@mdi/js'
 import { useBarcodeScanner } from '../lib/useBarcodeScanner'
-import { useHardwareScanner } from '../lib/prefs'
+import { useHardwareScanner, useCameraScan } from '../lib/prefs'
+import { currentMode, toggleMode } from '../lib/themes'
 
 type NavDef = { to: string; labelKey: string; end?: boolean; icon: React.ReactNode }
 
 const nav: NavDef[] = [
-  { to: '/', labelKey: 'nav.dashboard', end: true, icon: icon('M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z') },
-  { to: '/parts', labelKey: 'nav.parts', icon: icon('M4 7h16M4 12h16M4 17h16') },
-  { to: '/locations', labelKey: 'nav.locations', icon: icon('M3 3h18v18H3zM3 9h18M9 9v12') },
-  { to: '/projects', labelKey: 'nav.projects', icon: icon('M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4M8 8h8v8H8z') },
-  { to: '/tokens', labelKey: 'nav.apiTokens', icon: icon('M15 7a4 4 0 1 0-3.5 6H14v3h3v-3h2l2-2-2-2z M7 13v4h3') },
-  { to: '/settings', labelKey: 'nav.settings', icon: icon('M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.6 15H4.5a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 11 4.6V4.5a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.1a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.2 1z') },
+  { to: '/', labelKey: 'nav.dashboard', end: true, icon: icon(mdiViewDashboardOutline) },
+  { to: '/parts', labelKey: 'nav.parts', icon: icon(mdiFormatListBulletedSquare) },
+  { to: '/locations', labelKey: 'nav.locations', icon: icon(mdiMapMarkerOutline) },
+  { to: '/projects', labelKey: 'nav.projects', icon: icon(mdiFolderOutline) },
+  { to: '/settings', labelKey: 'nav.settings', icon: icon(mdiCogOutline) },
 ]
 
 // Page title + eyebrow keyed off the current route.
@@ -30,37 +54,109 @@ function crumbFor(path: string): [string, string] {
   if (path.startsWith('/locations')) return ['Inventory', 'Locations']
   if (path.startsWith('/projects/')) return ['Projects · Boards', 'Project']
   if (path.startsWith('/projects')) return ['Workspace', 'Projects']
-  if (path.startsWith('/tokens')) return ['Settings', 'API Tokens']
-  if (path.startsWith('/settings')) return ['Settings', 'Connections']
+  if (path.startsWith('/settings')) return ['Workspace', 'Settings']
   return ['Workspace', 'FireBin']
-}
-
-function currentTheme(): 'light' | 'dark' {
-  const attr = document.documentElement.getAttribute('data-theme')
-  if (attr === 'light' || attr === 'dark') return attr
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
 export function Layout() {
   const { t } = useTranslation()
-  const { user, logout } = useAuth()
+  const { user, logout, canWrite } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [sideOpen, setSideOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  const [scanMode, setScanMode] = useState<'camera' | 'scanner'>('camera')
   const [scanCode, setScanCode] = useState<string | null>(null)
+  const [actionPart, setActionPart] = useState<string | null>(null)
+  const [actionLot, setActionLot] = useState<string | null>(null)
+  const [moveSignal, setMoveSignal] = useState<{ locationId: string; name: string; n: number } | null>(null)
+  const moveNonce = useRef(0)
+  const [batchOpen, setBatchOpen] = useState(false)
+  const batchScanFn = useRef<((code: string) => void) | null>(null)
+  const [alphaHidden, setAlphaHidden] = useState(() => localStorage.getItem('firebin.alphaDismissed') === '1')
+  const openScan = (m: 'camera' | 'scanner') => { setScanMode(m); setScanCode(null); setScanOpen(true) }
   const [addOpen, setAddOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
-  const [theme, setTheme] = useState<'light' | 'dark'>(currentTheme)
+
+  // Global palette shortcut: "/" (when not typing in a field) or Cmd/Ctrl+K.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+      if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+        return
+      }
+      if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        setPaletteOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  const [mode, setMode] = useState<'light' | 'dark'>(currentMode)
+  useEffect(() => {
+    const on = () => setMode(currentMode())
+    window.addEventListener('firebin:theme', on)
+    return () => window.removeEventListener('firebin:theme', on)
+  }, [])
 
   // A USB keyboard-wedge scanner: a physical scan anywhere opens the scan flow
-  // pre-loaded with the code (paused while the scan modal is already open).
+  // pre-loaded with the code (paused while the scan modal is already open). A scan
+  // of FireBin's own deep-link QR (firebin://p/<code>) jumps straight to the part
+  // instead of the distributor-barcode flow.
   const hwScanner = useHardwareScanner()
-  useBarcodeScanner(
-    (code) => { setScanCode(code); setScanOpen(true) },
-    { enabled: hwScanner && !scanOpen },
-  )
+  const cameraScan = useCameraScan()
+  const scanInto = (code: string) => { setScanMode('camera'); setScanCode(code); setScanOpen(true) }
+  const handleScan = (code: string) => {
+    // Batch scan mode swallows every scan into its on-screen list.
+    if (batchScanFn.current) { batchScanFn.current(code); return }
+    // Viewer-role accounts get read-only scanning: a FireBin QR opens the part,
+    // lot, or location, but the write flows (action menu, distributor add, batch)
+    // stay off since the API would reject the mutation anyway.
+    const partCode = parseFirebinPartLink(code)
+    if (partCode != null) {
+      resolveFirebinPart(partCode).then((id) => {
+        if (!id) { if (canWrite) scanInto(code); return }
+        if (canWrite) setActionPart(id)
+        else navigate(`/parts/${id}`)
+      })
+      return
+    }
+    const stockCode = parseFirebinStockLink(code)
+    if (stockCode != null) {
+      resolveFirebinStock(stockCode).then((lot) => {
+        if (!lot) return
+        if (canWrite) setActionLot(lot.id)
+        else navigate(`/parts/${lot.part_id}`)
+      })
+      return
+    }
+    const locCode = parseFirebinLocationLink(code)
+    if (locCode != null) {
+      // A location scan while the part action menu is open = move the part there;
+      // otherwise just jump to the locations page.
+      resolveFirebinLocation(locCode).then((loc) => {
+        if (!loc) return
+        if (canWrite && actionPart) setMoveSignal({ locationId: loc.id, name: loc.name, n: ++moveNonce.current })
+        else navigate(`/locations/${loc.id}`)
+      })
+      return
+    }
+    if (canWrite) scanInto(code)
+  }
+  useBarcodeScanner(handleScan, { enabled: hwScanner && !scanOpen })
+
+  // The command palette opens batch scan by firing this event.
+  useEffect(() => {
+    const on = () => setBatchOpen(true)
+    window.addEventListener('firebin:batchscan', on)
+    return () => window.removeEventListener('firebin:batchscan', on)
+  }, [])
 
   // Categories power the manual "Add item" form; load once for the whole shell.
   useEffect(() => {
@@ -69,24 +165,14 @@ export function Layout() {
 
   const [eyebrow, title] = crumbFor(location.pathname)
 
-  const toggleTheme = () => {
-    const next = currentTheme() === 'dark' ? 'light' : 'dark'
-    document.documentElement.setAttribute('data-theme', next)
-    try {
-      localStorage.setItem('theme', next)
-    } catch {
-      // storage unavailable; theme still applied for this session
-    }
-    setTheme(next)
-  }
 
   return (
     <div className="app-grid">
       <aside className={`side ${sideOpen ? 'open' : ''}`}>
         <div className="brand">
-          <img src="/firelabs-mark.png" alt="FireLabs" className="hex" />
-          <div className="brand-name">
-            Fire<b>Bin</b>
+          <div className="brand-lockup" style={{ fontSize: 30, gap: 13 }}>
+            <FireBinIcon size={44} className="brand-ico" />
+            <span className="brand-name">Fire<b>Bin</b></span>
           </div>
         </div>
 
@@ -104,10 +190,6 @@ export function Layout() {
               {t(item.labelKey)}
             </NavLink>
           ))}
-          <button className="nav-item" onClick={() => setScanOpen(true)}>
-            {icon('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8')}
-            {t('nav.scanIntake')}
-          </button>
         </nav>
 
         <div className="side-foot">
@@ -125,25 +207,25 @@ export function Layout() {
 
       {sideOpen && <div className="scrim" onClick={() => setSideOpen(false)} />}
 
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-w-0 flex-col h-screen overflow-hidden">
         <header className="topbar">
           <button className="icon-btn menu-btn" onClick={() => setSideOpen((v) => !v)} aria-label="Menu">
-            {icon('M4 6h16M4 12h16M4 18h16')}
+            {icon(mdiMenu)}
           </button>
           <div className="crumb">
             <span className="eyebrow">{eyebrow}</span>
             <h1>{title}</h1>
           </div>
 
-          <div className="search">
-            {icon('M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3')}
-            <input placeholder="Search MPN, part, bin…" aria-label="Search" />
+          <button className="search" onClick={() => setPaletteOpen(true)} aria-label="Open search (press /)">
+            {icon(mdiMagnify)}
+            <span className="search-ph">Search MPN, part, bin…</span>
             <span className="kbd">/</span>
-          </div>
+          </button>
 
           <div className="scan-split">
-            <button className="scan-btn" onClick={() => setScanOpen(true)}>
-              {icon('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8')}
+            <button className="scan-btn" onClick={() => openScan(cameraScan ? 'camera' : 'scanner')}>
+              {icon(mdiBarcodeScan)}
               Scan
             </button>
             <button
@@ -153,51 +235,104 @@ export function Layout() {
               aria-haspopup="menu"
               aria-expanded={menuOpen}
             >
-              {icon('M6 9l6 6 6-6')}
+              {icon(mdiChevronDown)}
             </button>
             {menuOpen && (
               <>
                 <div className="menu-scrim" onClick={() => setMenuOpen(false)} />
                 <div className="scan-menu" role="menu">
+                  {cameraScan && (
+                    <button
+                      role="menuitem"
+                      onClick={() => { setMenuOpen(false); openScan('camera') }}
+                    >
+                      {icon(mdiCameraOutline)}
+                      Scan barcode (camera)
+                    </button>
+                  )}
                   <button
                     role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setScanOpen(true)
-                    }}
+                    onClick={() => { setMenuOpen(false); openScan('scanner') }}
                   >
-                    {icon('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8')}
-                    Scan barcode
+                    {icon(mdiBarcodeScan)}
+                    Scan barcode (scanner)
                   </button>
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setAddOpen(true)
-                    }}
-                  >
-                    {icon('M12 5v14M5 12h14')}
-                    Add item manually
-                  </button>
+                  {canWrite && (
+                    <button
+                      role="menuitem"
+                      onClick={() => { setMenuOpen(false); setBatchOpen(true) }}
+                    >
+                      {icon(mdiFormatListChecks)}
+                      Batch scan
+                    </button>
+                  )}
+                  {canWrite && (
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        setAddOpen(true)
+                      }}
+                    >
+                      {icon(mdiPlus)}
+                      Add item manually
+                    </button>
+                  )}
                 </div>
               </>
             )}
           </div>
-          <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === 'dark'
-              ? icon('M12 3v2M12 19v2M5 5l1.5 1.5M17.5 17.5L19 19M3 12h2M19 12h2M5 19l1.5-1.5M17.5 6.5L19 5M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8')
-              : icon('M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z')}
+          <button className="icon-btn" onClick={toggleMode} aria-label="Toggle light/dark">
+            {mode === 'dark' ? icon(mdiWhiteBalanceSunny) : icon(mdiWeatherNight)}
           </button>
         </header>
 
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 min-h-0 overflow-auto">
+          {!alphaHidden && (
+            <div className="alpha-banner">
+              <span>FireBin is in <b>alpha</b> — expect rough edges and breaking changes. Keep a backup (Settings → Data).</span>
+              <button className="alpha-x" aria-label="Dismiss" onClick={() => { localStorage.setItem('firebin.alphaDismissed', '1'); setAlphaHidden(true) }}>×</button>
+            </div>
+          )}
           <div className="mx-auto w-full max-w-6xl px-6 py-7">
             <Outlet />
           </div>
         </main>
+
+        <AppFooter />
       </div>
 
-      {scanOpen && <ScanModal initialCode={scanCode ?? undefined} onClose={() => { setScanOpen(false); setScanCode(null) }} />}
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+      {scanOpen && (
+        <ScanModal
+          mode={scanMode}
+          initialCode={scanCode ?? undefined}
+          onClose={() => { setScanOpen(false); setScanCode(null) }}
+          onResolvedPart={(id) => { setScanOpen(false); setScanCode(null); setActionPart(id) }}
+          onResolvedLot={(id) => { setScanOpen(false); setScanCode(null); setActionLot(id) }}
+        />
+      )}
+      {actionPart && (
+        <ScanActionMenu
+          partId={actionPart}
+          moveSignal={moveSignal}
+          onClose={() => { setActionPart(null); setMoveSignal(null) }}
+          onOpenPart={(id) => { setActionPart(null); setMoveSignal(null); navigate(`/parts/${id}`) }}
+        />
+      )}
+      {batchOpen && (
+        <BatchScanModal
+          registerScan={(fn) => { batchScanFn.current = fn }}
+          onClose={() => setBatchOpen(false)}
+        />
+      )}
+      {actionLot && (
+        <LotActionMenu
+          lotId={actionLot}
+          onClose={() => setActionLot(null)}
+          onOpenPart={(id) => { setActionLot(null); navigate(`/parts/${id}`) }}
+        />
+      )}
       {addOpen && (
         <PartFormModal
           categories={categories}
@@ -212,11 +347,3 @@ export function Layout() {
   )
 }
 
-// icon renders a 24x24 stroked path in the current colour.
-function icon(d: string) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} />
-    </svg>
-  )
-}

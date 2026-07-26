@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Fills-only mirror of firebin-mark.svg for ImageMagick rasterisation
+       (magick's MSVG renderer drops strokes). Chip body = an even-odd frame. -->
+  <path fill="#FF5A1F" fill-rule="evenodd"
+        d="M17 12.5 h14 a4.5 4.5 0 0 1 4.5 4.5 v14 a4.5 4.5 0 0 1 -4.5 4.5 h-14 a4.5 4.5 0 0 1 -4.5 -4.5 v-14 a4.5 4.5 0 0 1 4.5 -4.5 z
+           M17.5 15.5 a2 2 0 0 0 -2 2 v13 a2 2 0 0 0 2 2 h13 a2 2 0 0 0 2 -2 v-13 a2 2 0 0 0 -2 -2 z"/>
+  <rect x="4.5" y="16.5" width="9.5" height="3" rx="1.5" fill="#FF5A1F"/>
+  <rect x="4.5" y="22.5" width="9.5" height="3" rx="1.5" fill="#FF5A1F"/>
+  <rect x="4.5" y="28.5" width="9.5" height="3" rx="1.5" fill="#FF5A1F"/>
+  <rect x="34" y="16.5" width="9.5" height="3" rx="1.5" fill="#FF5A1F"/>
+  <rect x="34" y="22.5" width="9.5" height="3" rx="1.5" fill="#FF5A1F"/>
+  <rect x="34" y="28.5" width="9.5" height="3" rx="1.5" fill="#FF5A1F"/>
+  <circle cx="18.5" cy="18.5" r="2.1" fill="#FF5A1F"/>
+</svg>

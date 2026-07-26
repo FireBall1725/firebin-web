@@ -7,9 +7,13 @@ import { api, type Project } from '../lib/api'
 import { useRealtime } from '../lib/useRealtime'
 import { ProjectFormModal } from '../components/ProjectFormModal'
 import { ProjectCover } from '../components/ProjectCover'
+import { icon } from '../lib/icons'
+import { mdiPlus } from '@mdi/js'
+import { useAuth } from '../auth/AuthContext'
 
 export function ProjectsPage() {
   const navigate = useNavigate()
+  const { canWrite } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [showNew, setShowNew] = useState(false)
 
@@ -29,10 +33,12 @@ export function ProjectsPage() {
             Projects
           </h1>
         </div>
-        <button onClick={() => setShowNew(true)} className="btn primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
-          New project
-        </button>
+        {canWrite && (
+          <button onClick={() => setShowNew(true)} className="btn primary">
+            {icon(mdiPlus)}
+            New project
+          </button>
+        )}
       </div>
 
       {projects.length === 0 ? (

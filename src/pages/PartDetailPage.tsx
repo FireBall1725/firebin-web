@@ -13,13 +13,20 @@ import {
   type AdjustKind,
 } from '../lib/api'
 import { PartFormModal } from '../components/PartForm'
+import { PartThumb, CatChip } from '../components/PartsViews'
 import { ManufacturerParts } from '../components/ManufacturerParts'
+import { PrintLabelModal } from '../components/PrintLabelModal'
+import { StockLots } from '../components/StockLots'
 import { num } from '../lib/format'
 import { useRealtime } from '../lib/useRealtime'
+import { icon } from '../lib/icons'
+import { mdiChevronLeft } from '@mdi/js'
+import { useAuth } from '../auth/AuthContext'
 
 export function PartDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const { canWrite } = useAuth()
   const [part, setPart] = useState<Part | null>(null)
   const [stock, setStock] = useState<StockItem[]>([])
   const [history, setHistory] = useState<StockTransaction[]>([])
@@ -27,17 +34,35 @@ export function PartDetailPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [notFound, setNotFound] = useState(false)
   const [addVariant, setAddVariant] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [tab, setTab] = useState<'overview' | 'stock' | 'suppliers' | 'history'>('overview')
+  const [printing, setPrinting] = useState(false)
+  const [enriching, setEnriching] = useState(false)
+  const [enrichMsg, setEnrichMsg] = useState<string | null>(null)
+  const [providers, setProviders] = useState<{ provider: string; label: string }[]>([])
+  const [pickOpen, setPickOpen] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const toggleSel = (name: string) =>
+    setSelected((s) => { const n = new Set(s); if (n.has(name)) n.delete(name); else n.add(name); return n })
 
   const reload = useCallback(() => {
     api.getPart(id).then(setPart).catch(() => setNotFound(true))
     api.listPartStock(id).then(setStock).catch(() => setStock([]))
     api.listPartHistory(id).then(setHistory).catch(() => setHistory([]))
+    // Refresh categories too, so a just-created category resolves for the chip
+    // and thumbnail without a manual page reload.
+    api.listCategories().then(setCategories).catch(() => undefined)
   }, [id])
 
   useEffect(() => {
     reload()
     api.listLocations().then(setLocations).catch(() => setLocations([]))
     api.listCategories().then(setCategories).catch(() => setCategories([]))
+    api.enrichStatus().then((s) => {
+      const cfg = s.providers.filter((p) => p.configured)
+      setProviders(cfg.map((p) => ({ provider: p.provider, label: p.label })))
+      setSelected(new Set(cfg.map((p) => p.provider)))
+    }).catch(() => undefined)
   }, [reload])
 
   useRealtime(['parts', 'stock'], reload)
@@ -61,15 +86,39 @@ export function PartDetailPage() {
     navigate('/parts')
   }
 
+  // Refresh parameters, datasheet, and supplier pricing from the metadata
+  // provider, looked up by the part's primary MPN. Applied server-side (the same
+  // path the bulk refresh uses) so single + bulk never diverge.
+  const updateFromProvider = async (names?: string[]) => {
+    const mpn = part.manufacturer_parts?.[0]?.mpn || part.primary_mpn
+    if (!mpn) {
+      setEnrichMsg('Add an MPN first — the provider looks the part up by manufacturer part number.')
+      return
+    }
+    setEnriching(true)
+    setEnrichMsg(null)
+    try {
+      const r = await api.enrichPart(part.id, names)
+      setEnrichMsg(`Updated from ${r.source || 'the provider'} — parameters, datasheet, and pricing.`)
+      reload()
+    } catch {
+      setEnrichMsg('Update failed — check the MPN, or that enrichment is configured in Settings.')
+    } finally {
+      setEnriching(false)
+    }
+  }
+
   return (
     <div>
       <Link to="/parts" className="btn sm" style={{ marginBottom: 14 }}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
+        {icon(mdiChevronLeft)}
         Parts
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-3">
+          <PartThumb part={part} catName={categories.find((c) => c.id === part.category_id)?.name} size={44} />
+          <div className="min-w-0">
           <span className="eyebrow">
             {part.variant_of ? 'Variant' : isTemplate ? 'Template' : 'Part'}
           </span>
@@ -77,6 +126,10 @@ export function PartDetailPage() {
             {part.name}
           </h1>
           <div className="flex flex-wrap items-center gap-2">
+            {(() => {
+              const cn = categories.find((c) => c.id === part.category_id)?.name
+              return cn ? <CatChip catName={cn} partName={part.name} /> : null
+            })()}
             {part.ipn && <span className="tag mono" title="FireBin part number">{part.ipn}</span>}
             {part.package && <span className="tag">{part.package}</span>}
             {isTemplate && (
@@ -91,6 +144,7 @@ export function PartDetailPage() {
             )}
             {part.barcode && <span className="tag">{part.barcode}</span>}
           </div>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div style={{ textAlign: 'right' }}>
@@ -99,11 +153,113 @@ export function PartDetailPage() {
               {num(part.total_stock)}
             </div>
           </div>
-          <button onClick={del} className="btn sm danger">Delete</button>
+          {canWrite && <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex' }}>
+              <button
+                onClick={() => { setPickOpen(false); updateFromProvider() }}
+                disabled={enriching}
+                className="btn sm"
+                title="Refresh parameters, datasheet & pricing from all configured providers by MPN"
+                style={providers.length > 1 ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : undefined}
+              >
+                {enriching ? 'Updating…' : 'Update'}
+              </button>
+              {providers.length > 1 && (
+                <button
+                  onClick={() => setPickOpen((v) => !v)}
+                  disabled={enriching}
+                  className="btn sm"
+                  aria-label="Choose enrichment sources"
+                  style={{ marginLeft: -1, padding: '0 8px', borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+                >
+                  ▾
+                </button>
+              )}
+            </div>
+            {pickOpen && (
+              <>
+                <div onClick={() => setPickOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+                <div
+                  style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 31,
+                    minWidth: 190, padding: 10, borderRadius: 11,
+                    background: 'var(--panel)', border: '1px solid var(--border)',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.28)',
+                  }}
+                >
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>Enrichment sources</div>
+                  {providers.map((p) => (
+                    <label key={p.provider} className="flex items-center gap-2" style={{ padding: '4px 2px', cursor: 'pointer', fontSize: 13 }}>
+                      <input type="checkbox" checked={selected.has(p.provider)} onChange={() => toggleSel(p.provider)} />
+                      <span className="c-text">{p.label}</span>
+                    </label>
+                  ))}
+                  <button
+                    className="btn sm primary"
+                    style={{ width: '100%', marginTop: 8 }}
+                    disabled={enriching || selected.size === 0}
+                    onClick={() => { setPickOpen(false); updateFromProvider([...selected]) }}
+                  >
+                    Update from selected
+                  </button>
+                </div>
+              </>
+            )}
+          </div>}
+          <button onClick={() => setPrinting(true)} className="btn sm">Label</button>
+          {canWrite && <button onClick={() => setEditing(true)} className="btn sm">Edit</button>}
+          {canWrite && <button onClick={del} className="btn sm danger">Delete</button>}
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      {enrichMsg && (
+        <div className="banner" style={{ marginTop: 12, fontSize: 13 }}>{enrichMsg}</div>
+      )}
+
+      {printing && (
+        <PrintLabelModal partIDs={[part.id]} title={part.name} onClose={() => setPrinting(false)} />
+      )}
+
+      {editing && (
+        <PartFormModal
+          categories={categories}
+          title="Edit part"
+          editId={part.id}
+          initial={{
+            name: part.name,
+            category: categories.find((c) => c.id === part.category_id)?.name ?? '',
+            package: part.package ?? '',
+            ipn: part.ipn ?? '',
+            description: part.description ?? '',
+            variant_of: part.variant_of,
+            is_template: part.is_template,
+            minimum_stock: part.minimum_stock,
+            parameters: (part.parameters ?? []).map((p) => ({
+              name: p.template_name,
+              value: p.value,
+              units: p.units ?? '',
+            })),
+          }}
+          onClose={() => setEditing(false)}
+          onCreated={() => { setEditing(false); reload() }}
+        />
+      )}
+
+      <div className="tabs" style={{ marginTop: 20 }}>
+        {([
+          { id: 'overview', label: 'Overview' },
+          ...(!isTemplate ? [{ id: 'stock' as const, label: 'Stock' }] : []),
+          { id: 'suppliers', label: 'Suppliers & pricing' },
+          { id: 'history', label: 'History' },
+        ] as { id: typeof tab; label: string }[]).map((t) => (
+          <button key={t.id} className={`tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (<>
+      <div className="grid gap-4 lg:grid-cols-2">
         {/* Parameters */}
         <Section title="Parameters">
           {part.parameters && part.parameters.length > 0 ? (
@@ -130,9 +286,11 @@ export function PartDetailPage() {
           <Section
             title="Variants"
             action={
-              <button onClick={() => setAddVariant(true)} className="link" style={{ fontSize: 12 }}>
-                + add variant
-              </button>
+              canWrite ? (
+                <button onClick={() => setAddVariant(true)} className="link" style={{ fontSize: 12 }}>
+                  + add variant
+                </button>
+              ) : undefined
             }
           >
             {part.variants && part.variants.length > 0 ? (
@@ -148,43 +306,25 @@ export function PartDetailPage() {
               <Empty>No variants yet.</Empty>
             )}
           </Section>
-        ) : (
+        ) : canWrite ? (
           <Section title="Adjust stock" pad>
             <AdjustStock partID={part.id} locations={locations} onDone={reload} />
           </Section>
-        )}
+        ) : null}
       </div>
 
-      {/* Stock by bin */}
-      {!isTemplate && (
-        <Section title="Stock by location" className="mt-4" flush>
-          {stock.length > 0 ? (
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Location</th>
-                  <th>Batch</th>
-                  <th className="num">Quantity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stock.map((s) => (
-                  <tr key={s.id}>
-                    <td className="c-text">{s.location_name || <span className="c-faint">unassigned</span>}</td>
-                    <td className="mono c-faint">{s.batch || '—'}</td>
-                    <td className="num c-text">{num(s.quantity)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="p-4"><Empty>No stock recorded. Use “Adjust stock” to add some.</Empty></div>
-          )}
+      </>)}
+
+      {/* Stock by bin + lots (split / move / merge / label) */}
+      {tab === 'stock' && !isTemplate && (
+        <Section title="Stock by location" flush>
+          <StockLots partName={part.name} stock={stock} locations={locations} onChanged={reload} canWrite={canWrite} />
         </Section>
       )}
 
+      {tab === 'suppliers' && (<>
       {/* Commercial tree: MPNs → supplier SKUs → price breaks */}
-      <div className="mt-4">
+      <div>
         <ManufacturerParts partID={part.id} items={part.manufacturer_parts ?? []} onChanged={reload} />
       </div>
 
@@ -216,31 +356,43 @@ export function PartDetailPage() {
         </Section>
       )}
 
-      {/* History */}
-      <Section title="Stock history" className="mt-4">
+      </>)}
+
+      {tab === 'history' && (
+      <Section title="Stock history">
         {history.length > 0 ? (
           <div>
-            {history.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-2.5 bd-b">
-                <span className="c-dim text-sm">
-                  <span className="mono" style={{ fontSize: 11, textTransform: 'uppercase' }}>{t.kind}</span>
-                  {t.note ? ` · ${t.note}` : ''}
-                </span>
-                <span className="flex items-center gap-4 mono" style={{ fontSize: 12 }}>
-                  <span className={t.delta >= 0 ? 'c-good' : 'c-crit'}>
-                    {t.delta >= 0 ? '+' : ''}
-                    {num(t.delta)}
+            {history.map((t) => {
+              const isMove = t.kind === 'move'
+              const transfer = isMove
+                ? `${t.from_location_name || 'Unassigned'} → ${t.to_location_name || 'Unassigned'}`
+                : ''
+              return (
+                <div key={t.id} className="flex items-center justify-between px-4 py-2.5 bd-b">
+                  <span className="c-dim text-sm">
+                    <span className="mono" style={{ fontSize: 11, textTransform: 'uppercase' }}>{t.kind}</span>
+                    {isMove ? ` · ${transfer}` : t.note ? ` · ${t.note}` : ''}
                   </span>
-                  <span className="c-faint">→ {num(t.resulting_quantity)}</span>
-                  <span className="c-faint">{new Date(t.created_at).toLocaleDateString()}</span>
-                </span>
-              </div>
-            ))}
+                  <span className="flex items-center gap-4 mono" style={{ fontSize: 12 }}>
+                    {isMove ? (
+                      <span className="c-dim">{num(Math.abs(t.delta))}</span>
+                    ) : (
+                      <span className={t.delta >= 0 ? 'c-good' : 'c-crit'}>
+                        {t.delta >= 0 ? '+' : ''}
+                        {num(t.delta)}
+                      </span>
+                    )}
+                    <span className="c-faint">{new Date(t.created_at).toLocaleDateString()}</span>
+                  </span>
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className="p-4"><Empty>No movements yet.</Empty></div>
         )}
       </Section>
+      )}
 
       {addVariant && (
         <PartFormModal

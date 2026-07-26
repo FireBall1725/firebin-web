@@ -5,9 +5,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { readBarcodes, prepareZXingModule, type ReaderOptions } from 'zxing-wasm/reader'
 import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'
-import { api, type ScanResult, type StorageLocation, type EnrichedPart, type PriceBreak, type Category } from '../lib/api'
+import { api, type ScanResult, type StorageLocation, type EnrichedPart, type PriceBreak, type Category, type AdjustKind } from '../lib/api'
 import { num } from '../lib/format'
+import { parseFirebinPartLink, resolveFirebinPart, parseFirebinStockLink, resolveFirebinStock } from '../lib/deepLink'
 import { PartForm, type PartDraft, type DraftSupplier } from './PartForm'
+import { icon } from '../lib/icons'
+import { mdiClose, mdiBarcodeScan } from '@mdi/js'
 
 // Only import supplier SKUs from these major distributors on enrichment — skip
 // the long tail of obscure brokers Octopart lists.
@@ -69,9 +72,10 @@ function resultText(r: { bytes: Uint8Array; text: string }): string {
   }
 }
 
-export function ScanModal({ onClose, initialCode }: { onClose: () => void; initialCode?: string }) {
+export function ScanModal({ onClose, initialCode, mode = 'camera', onResolvedPart, onResolvedLot }: { onClose: () => void; initialCode?: string; mode?: 'camera' | 'scanner'; onResolvedPart?: (id: string) => void; onResolvedLot?: (id: string) => void }) {
   const navigate = useNavigate()
   const videoRef = useRef<HTMLVideoElement>(null)
+  const scannerRef = useRef<HTMLInputElement>(null)
   const [camError, setCamError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
@@ -82,7 +86,7 @@ export function ScanModal({ onClose, initialCode }: { onClose: () => void; initi
   // tears down only its own stream, so React StrictMode can't leave a
   // detached-but-live stream (green light on, no feed).
   useEffect(() => {
-    if (result || initialCode) return // a code was handed in (e.g. a USB scanner) — no camera
+    if (result || initialCode || mode === 'scanner') return // handed a code, or scanner mode — no camera
     let stopped = false
     let stream: MediaStream | null = null
     let timer: number | undefined
@@ -157,6 +161,32 @@ export function ScanModal({ onClose, initialCode }: { onClose: () => void; initi
   }, [result])
 
   const handleCode = async (raw: string) => {
+    // FireBin's own label QR: jump straight to the part instead of the
+    // distributor-barcode lookup.
+    const link = parseFirebinPartLink(raw)
+    if (link != null) {
+      setBusy(true)
+      const id = await resolveFirebinPart(link)
+      setBusy(false)
+      if (id) {
+        // Prefer the scan action menu (quick add/remove/move); fall back to nav.
+        if (onResolvedPart) onResolvedPart(id)
+        else { onClose(); navigate(`/parts/${id}`) }
+        return
+      }
+      setCamError('That FireBin code did not match a part.')
+      return
+    }
+    const lotLink = parseFirebinStockLink(raw)
+    if (lotLink != null) {
+      setBusy(true)
+      const lot = await resolveFirebinStock(lotLink)
+      setBusy(false)
+      if (lot && onResolvedLot) { onResolvedLot(lot.id); return }
+      if (lot) { onClose(); navigate(`/parts/${lot.part_id}`); return }
+      setCamError('That FireBin code did not match a lot.')
+      return
+    }
     setBusy(true)
     try {
       const r = await api.scan(raw)
@@ -178,6 +208,11 @@ export function ScanModal({ onClose, initialCode }: { onClose: () => void; initi
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCode])
+
+  // Scanner mode: keep the capture field focused so a wedge scanner types into it.
+  useEffect(() => {
+    if (mode === 'scanner' && !result) scannerRef.current?.focus()
+  }, [mode, result])
 
   const onFile = async (file: File) => {
     setBusy(true)
@@ -215,16 +250,46 @@ export function ScanModal({ onClose, initialCode }: { onClose: () => void; initi
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
-          <h3>Scan intake</h3>
+          <h3>{mode === 'scanner' ? 'Scan with scanner' : 'Scan intake'}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            {icon(mdiClose)}
           </button>
         </div>
 
-        {!result ? (
+        {result ? (
+          <ScanResultView
+            result={result}
+            onClose={onClose}
+            onRescan={() => { setResult(null); setManual('') }}
+            navigate={navigate}
+          />
+        ) : mode === 'scanner' ? (
+          <div className="modal-b">
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0 2px' }}>
+              {icon(mdiBarcodeScan, { size: 46, style: { color: 'var(--accent)' } })}
+            </div>
+            <p className="c-dim" style={{ fontSize: 13.5, textAlign: 'center', marginTop: 4 }}>
+              Scan the barcode with your USB or Bluetooth scanner — it types the code and presses Enter.
+            </p>
+            <input
+              ref={scannerRef}
+              className="input mono"
+              style={{ marginTop: 12, textAlign: 'center', fontSize: 15, padding: '12px' }}
+              value={manual}
+              placeholder="Waiting for scan…"
+              onChange={(e) => setManual(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && manual.trim()) handleCode(manual.trim()) }}
+            />
+            {busy && <p className="c-dim" style={{ fontSize: 12.5, marginTop: 10, textAlign: 'center' }}>Reading…</p>}
+            {camError && <p className="c-dim" style={{ fontSize: 12.5, marginTop: 10, textAlign: 'center' }}>{camError}</p>}
+            <p className="c-faint" style={{ fontSize: 12, marginTop: 12, textAlign: 'center', lineHeight: 1.5 }}>
+              Nothing happening? Click the field above first, then scan. You can also type the code and press Enter.
+            </p>
+          </div>
+        ) : (
           <div className="modal-b">
               <p className="c-dim" style={{ fontSize: 13, marginTop: 0 }}>
                 Point the camera at a distributor bag's Data&nbsp;Matrix, or upload a photo.
@@ -269,13 +334,6 @@ export function ScanModal({ onClose, initialCode }: { onClose: () => void; initi
                 </div>
               </div>
           </div>
-        ) : (
-          <ScanResultView
-            result={result}
-            onClose={onClose}
-            onRescan={() => { setResult(null); setManual('') }}
-            navigate={navigate}
-          />
         )}
       </div>
     </div>
@@ -403,15 +461,15 @@ function ScanResultView({
   // (authoritative) plus the major distributors Octopart lists (with prices).
   const suppliers: DraftSupplier[] = []
   const seen = new Set<string>()
-  const push = (supplier: string, sku: string, pricing: PriceBreak[]) => {
+  const push = (supplier: string, sku: string, pricing: PriceBreak[], url?: string, packaging?: string) => {
     const key = `${supplier.toLowerCase()}|${sku.toLowerCase()}`
     if (!supplier || !sku || seen.has(key)) return
     seen.add(key)
-    suppliers.push({ supplier, sku, pricing })
+    suppliers.push({ supplier, sku, url, packaging, pricing })
   }
   if (parsed.distributor && parsed.customer_part) push(parsed.distributor, parsed.customer_part, [])
   for (const s of enriched?.suppliers ?? []) {
-    if (MAJOR_DISTRIBUTORS.test(s.name)) push(s.name, s.sku, s.prices)
+    if (MAJOR_DISTRIBUTORS.test(s.name)) push(s.name, s.sku, s.prices, s.url, s.packaging)
   }
 
   const draft: PartDraft = {
@@ -469,6 +527,11 @@ function MatchView({
   onRescan: () => void
   onDone: (partID: string) => void
 }) {
+  // A matched scan is an inventory action, not just a receive: add stock from a
+  // bag, remove when pulling parts (the "scan the bin label to draw down" case),
+  // or count to set an absolute quantity. No API/enrichment call — the part is
+  // already known.
+  const [kind, setKind] = useState<AdjustKind>('add')
   const [qty, setQty] = useState(parsed.quantity > 0 ? String(parsed.quantity) : '')
   const [locationID, setLocationID] = useState('')
   const [locations, setLocations] = useState<StorageLocation[]>([])
@@ -478,18 +541,22 @@ function MatchView({
     api.listLocations().then(setLocations).catch(() => undefined)
   }, [])
 
-  const add = async () => {
+  const apply = async () => {
+    const q = parseFloat(qty)
+    if (isNaN(q) || q < 0) return
     setBusy(true)
     try {
-      const q = parseFloat(qty)
-      if (!isNaN(q) && q > 0) {
-        await api.adjustStock(match.part_id, { kind: 'add', quantity: q, location_id: locationID || null, note })
-      }
+      await api.adjustStock(match.part_id, { kind, quantity: q, location_id: locationID || null, note })
       onDone(match.part_id)
     } finally {
       setBusy(false)
     }
   }
+
+  const btnLabel =
+    kind === 'add' ? `Add ${qty || '0'} to stock`
+    : kind === 'remove' ? `Remove ${qty || '0'} from stock`
+    : `Set stock to ${qty || '0'}`
 
   return (
     <div className="modal-b">
@@ -497,9 +564,14 @@ function MatchView({
       <p style={{ marginTop: 0, fontSize: 13.5 }}>
         Matches <span style={{ fontWeight: 600 }}>{match.part_name}</span> in your inventory.
       </p>
+      <div className="seg" style={{ marginBottom: 10 }}>
+        {(['add', 'remove', 'count'] as AdjustKind[]).map((k) => (
+          <button key={k} onClick={() => setKind(k)} className={`seg-btn ${kind === k ? 'on' : ''}`}>{k}</button>
+        ))}
+      </div>
       <div className="grid grid-cols-2 gap-2">
-        <label className="fieldlabel"><span>Quantity</span>
-          <input type="number" className="input" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
+        <label className="fieldlabel"><span>{kind === 'count' ? 'Counted quantity' : 'Quantity'}</span>
+          <input type="number" className="input" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" autoFocus />
         </label>
         <label className="fieldlabel"><span>Location</span>
           <select className="input" value={locationID} onChange={(e) => setLocationID(e.target.value)}>
@@ -510,8 +582,8 @@ function MatchView({
       </div>
       <div className="flex gap-2" style={{ marginTop: 12 }}>
         <button className="btn" onClick={onRescan}>Scan again</button>
-        <button className="btn primary" style={{ flex: 1, justifyContent: 'center' }} disabled={busy} onClick={add}>
-          Add {qty || '0'} to stock
+        <button className="btn primary" style={{ flex: 1, justifyContent: 'center' }} disabled={busy || !qty} onClick={apply}>
+          {busy ? '…' : btnLabel}
         </button>
       </div>
     </div>

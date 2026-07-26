@@ -1,10 +1,36 @@
-# firebin-web
+<p align="center">
+  <img src=".github/assets/firebin-logo.png" width="88" alt="FireBin" />
+</p>
+<h1 align="center">firebin-web</h1>
+<p align="center">
+  The <a href="https://github.com/FireBall1725/firebin">FireBin</a> web client, a self-hosted electronics parts inventory.
+</p>
+<p align="center">
+  <a href="https://github.com/FireBall1725/firebin">Umbrella</a> ·
+  <a href="https://github.com/FireBall1725/firebin-api">API</a> ·
+  <a href="https://fireball1725.github.io/firebin-api/">API reference</a>
+</p>
 
-The FireBin web client. React 19, TypeScript, Vite 8, and Tailwind 4. It talks to `firebin-api` over REST at `/api/v1` and holds no data of its own; every part, bin, and price comes from the API.
+---
 
-FireBin is a self-hosted electronics parts inventory. Browse and group parts by name and variant, adjust stock at a location, scan a distributor barcode with the camera or a USB wedge, cut a reel into a barcoded mini spool, and design and print bin, part, and lot labels (including Brother P-touch tape over WebUSB). This repo is one of three: `firebin-web` (here), `firebin-api` (the Go backend), and `firebin` (compose files and self-host docs).
+React 19, TypeScript, Vite 8, and Tailwind 4. It talks to `firebin-api` over REST at `/api/v1` and holds no data of its own; every part, bin, and price comes from the API.
+
+Browse and group parts by name and variant, adjust stock at a location, scan a distributor barcode with the camera or a USB wedge, cut a reel into a barcoded mini spool, and design and print bin, part, and lot labels (including Brother P-touch tape over WebUSB). This repo is one of three: `firebin-web` (here), [`firebin-api`](https://github.com/FireBall1725/firebin-api) (the Go backend), and [`firebin`](https://github.com/FireBall1725/firebin) (compose files and self-host docs).
 
 FireBin is in alpha.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/dashboard.png" alt="Dashboard" /><br/><sub><b>Dashboard</b></sub></td>
+    <td width="50%"><img src=".github/assets/parts.png" alt="Parts" /><br/><sub><b>Parts</b>, grouped and colour-coded</sub></td>
+  </tr>
+  <tr>
+    <td><img src=".github/assets/part-detail.png" alt="Part detail" /><br/><sub><b>Part detail</b> with stock adjust</sub></td>
+    <td><img src=".github/assets/label-designer.png" alt="Label designer" /><br/><sub><b>Label designer</b></sub></td>
+  </tr>
+</table>
 
 ## Run it for development
 
@@ -49,3 +75,10 @@ See [CLAUDE.md](CLAUDE.md) for the architecture, the conventions, and the checks
 ## Licence
 
 AGPL-3.0-only. See [LICENSE](LICENSE).
+
+---
+
+<p align="center">
+  <a href="https://fireball1725.ca"><img src=".github/assets/fireball-logo.png" width="38" alt="FireBall1725" /></a>
+</p>
+<p align="center">Built by <a href="https://fireball1725.ca">FireBall1725</a> in Ontario, Canada 🇨🇦</p>

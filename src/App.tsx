@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
-import { TokensPage } from './pages/TokensPage'
 import { PartsPage } from './pages/PartsPage'
 import { PartDetailPage } from './pages/PartDetailPage'
 import { LocationsPage } from './pages/LocationsPage'
@@ -25,10 +24,12 @@ export function App() {
           <Route path="parts" element={<PartsPage />} />
           <Route path="parts/:id" element={<PartDetailPage />} />
           <Route path="locations" element={<LocationsPage />} />
+          <Route path="locations/:id" element={<LocationsPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
           <Route path="projects/:projectId/boards/:boardId" element={<BoardDetailPage />} />
-          <Route path="tokens" element={<TokensPage />} />
+          {/* API tokens moved under Settings; keep the old path working. */}
+          <Route path="tokens" element={<Navigate to="/settings?section=tokens" replace />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>

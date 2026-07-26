@@ -4,6 +4,8 @@
 import { useRef, useState } from 'react'
 import { api, type Project } from '../lib/api'
 import { ProjectCover } from './ProjectCover'
+import { icon } from '../lib/icons'
+import { mdiClose } from '@mdi/js'
 
 // ProjectFormModal creates or edits a project (name, description, tags). Pass a
 // `project` to edit; omit it to create.
@@ -62,12 +64,12 @@ export function ProjectFormModal({
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <h3>{editing ? 'Edit project' : 'New project'}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            {icon(mdiClose)}
           </button>
         </div>
         <div className="modal-b space-y-3">

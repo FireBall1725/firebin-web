@@ -5,15 +5,29 @@ import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'reac
 import {
   api,
   type Category,
+  type EnrichedPart,
   type ParameterInput,
   type PriceBreak,
   type StorageLocation,
 } from '../lib/api'
+import { SymbolPicker, PartGraphic } from './SymbolPicker'
+import { catStyle, symbolSrc, CATEGORY_SUGGESTIONS } from '../lib/symbols'
+import { icon } from '../lib/icons'
+import { mdiClose } from '@mdi/js'
+
+// A distributor SKU isn't an MPN, so a direct lookup misses. Strip Digi-Key's
+// "-ND" and a trailing cut-tape/reel code so "RMCF0603JT100RCT-ND" → the real
+// MPN "RMCF0603JT100R" as a second attempt.
+function cleanDistributorSKU(q: string): string {
+  return q.replace(/-ND$/i, '').replace(/(CT|TR|DKR)$/i, '')
+}
 
 // A supplier SKU captured from a scan/enrichment, imported silently on create.
 export interface DraftSupplier {
   supplier: string
   sku: string
+  url?: string
+  packaging?: string
   pricing: PriceBreak[]
 }
 
@@ -25,6 +39,7 @@ export interface PartDraft {
   package?: string
   ipn?: string
   description?: string
+  image_path?: string
   variant_of?: string
   is_template?: boolean
   minimum_stock?: number
@@ -48,7 +63,8 @@ export function PartForm({
   initial,
   header,
   note,
-  submitLabel = 'Create',
+  submitLabel,
+  editId,
   onCancel,
   onCreated,
 }: {
@@ -57,17 +73,24 @@ export function PartForm({
   header?: ReactNode
   note?: string | null
   submitLabel?: string
+  // When set, the form edits that part (PATCH) instead of creating one, and the
+  // commercial/stock creation sections are hidden (those are managed elsewhere).
+  editId?: string
   onCancel: () => void
   onCreated: (id: string) => void
 }) {
+  const editing = !!editId
+  const saveLabel = submitLabel ?? (editing ? 'Save changes' : 'Create')
   const [name, setName] = useState(initial?.name ?? '')
   const [category, setCategory] = useState(initial?.category ?? '')
   const [pkg, setPkg] = useState(initial?.package ?? '')
   const [ipn, setIpn] = useState(initial?.ipn ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
-  const [isTemplate, setIsTemplate] = useState(initial?.is_template ?? false)
   const [minimum, setMinimum] = useState(String(initial?.minimum_stock ?? 0))
   const [params, setParams] = useState<ParameterInput[]>(initial?.parameters ?? [])
+  const [imagePath, setImagePath] = useState<string | null>(initial?.image_path ?? null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [manufacturer, setManufacturer] = useState(initial?.manufacturer ?? '')
   const [mpn, setMpn] = useState(initial?.mpn ?? '')
   const [datasheet, setDatasheet] = useState(initial?.datasheet_url ?? '')
@@ -77,8 +100,13 @@ export function PartForm({
   const [paramNames, setParamNames] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [suppliers, setSuppliers] = useState<DraftSupplier[]>(initial?.suppliers ?? [])
 
-  const suppliers = initial?.suppliers ?? []
+  // Manual "look up a part" (blank add only): enrich by MPN and prefill.
+  const [lookup, setLookup] = useState('')
+  const [lookupBusy, setLookupBusy] = useState(false)
+  const [lookupMsg, setLookupMsg] = useState<string | null>(null)
+  const showLookup = !editing && !initial?.mpn
   // Unique datalist ids so multiple mounts don't collide.
   const uid = useId()
   const catListID = `cat-${uid}`
@@ -93,6 +121,51 @@ export function PartForm({
       .then((t) => setParamNames(t.map((x) => x.name)))
       .catch(() => setParamNames([]))
   }, [])
+
+  // Local object-URL preview for a not-yet-uploaded image file.
+  const [filePreview, setFilePreview] = useState<string | null>(null)
+  useEffect(() => {
+    if (!imageFile) { setFilePreview(null); return }
+    const url = URL.createObjectURL(imageFile)
+    setFilePreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [imageFile])
+
+  const clearGraphic = () => { setImagePath(null); setImageFile(null) }
+
+  const applyEnriched = (e: EnrichedPart) => {
+    if (e.name) setName(e.name)
+    if (e.category) setCategory(e.category)
+    if (e.package) setPkg(e.package)
+    if (e.description) setDescription(e.description)
+    if (e.parameters?.length) setParams(e.parameters.map((p) => ({ name: p.name, value: p.value, units: p.units })))
+    if (e.manufacturer) setManufacturer(e.manufacturer)
+    if (e.mpn) setMpn(e.mpn)
+    if (e.datasheet_url) setDatasheet(e.datasheet_url)
+    if (e.suppliers?.length) setSuppliers(e.suppliers.map((s) => ({ supplier: s.name, sku: s.sku, url: s.url, packaging: s.packaging, pricing: s.prices })))
+  }
+
+  const doLookup = async () => {
+    const q = lookup.trim()
+    if (!q) return
+    setLookupBusy(true)
+    setLookupMsg(null)
+    try {
+      let r = await api.enrich(q)
+      const cleaned = cleanDistributorSKU(q)
+      if ((!r.found || !r.part) && cleaned !== q) r = await api.enrich(cleaned)
+      if (r.found && r.part) {
+        applyEnriched(r.part)
+        setLookupMsg(`Filled from ${r.part.source || 'lookup'}. Review and save.`)
+      } else {
+        setLookupMsg('No match — enter the details manually below.')
+      }
+    } catch {
+      setLookupMsg('Lookup failed. Check enrichment is configured in Settings.')
+    } finally {
+      setLookupBusy(false)
+    }
+  }
 
   const addParam = () => setParams((p) => [...p, { name: '', value: '', units: '' }])
   const setParam = (i: number, patch: Partial<ParameterInput>) =>
@@ -117,6 +190,26 @@ export function PartForm({
         categoryID = existing ? existing.id : (await api.createCategory(catName)).id
       }
 
+      // Edit: patch the part's core fields + parameters. Manufacturer parts,
+      // suppliers, and stock are managed on the detail page, not here.
+      if (editId) {
+        await api.updatePart(editId, {
+          name: name.trim(),
+          category_id: categoryID,
+          variant_of: initial?.variant_of ?? null,
+          ipn: ipn.trim() || null,
+          package: pkg || null,
+          description: description || null,
+          image_path: imagePath,
+          is_template: false,
+          minimum_stock: parseFloat(minimum) || 0,
+          parameters: params.filter((p) => p.name.trim() && p.value.trim()),
+        })
+        if (imageFile) await api.uploadPartImage(editId, imageFile)
+        onCreated(editId)
+        return
+      }
+
       const part = await api.createPart({
         name: name.trim(),
         category_id: categoryID,
@@ -124,13 +217,16 @@ export function PartForm({
         ipn: ipn.trim() || null,
         package: pkg || null,
         description: description || null,
-        is_template: isTemplate,
+        image_path: imageFile ? null : imagePath,
+        is_template: false,
         minimum_stock: parseFloat(minimum) || 0,
         parameters: params.filter((p) => p.name.trim() && p.value.trim()),
       })
 
+      if (imageFile) await api.uploadPartImage(part.id, imageFile)
+
       // A template groups variants; it holds no MPN or stock of its own.
-      if (!isTemplate && mpn.trim()) {
+      if (mpn.trim()) {
         const mp = await api.createManufacturerPart(part.id, {
           manufacturer: manufacturer.trim(),
           mpn: mpn.trim(),
@@ -142,13 +238,13 @@ export function PartForm({
           if (!s.sku || seen.has(key)) continue
           seen.add(key)
           await api
-            .createSupplierPart(mp.id, { supplier: s.supplier, sku: s.sku, pricing: s.pricing })
+            .createSupplierPart(mp.id, { supplier: s.supplier, sku: s.sku, url: s.url ?? null, packaging: s.packaging ?? null, pricing: s.pricing })
             .catch(() => undefined)
         }
       }
 
       const q = parseFloat(qty)
-      if (!isTemplate && !isNaN(q) && q > 0) {
+      if (!isNaN(q) && q > 0) {
         await api.adjustStock(part.id, {
           kind: 'add',
           quantity: q,
@@ -158,7 +254,7 @@ export function PartForm({
       }
       onCreated(part.id)
     } catch {
-      setError('Could not create part')
+      setError(editing ? 'Could not save changes' : 'Could not create part')
     } finally {
       setBusy(false)
     }
@@ -168,6 +264,28 @@ export function PartForm({
     <form onSubmit={submit}>
       <div className="modal-b space-y-4">
         {header}
+
+        {showLookup && (
+          <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 11, padding: 12 }}>
+            <span className="eyebrow">Look up a part</span>
+            <div className="flex gap-2" style={{ marginTop: 6 }}>
+              <input
+                className="input mono"
+                value={lookup}
+                placeholder="MPN or distributor part no."
+                onChange={(e) => setLookup(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doLookup() } }}
+              />
+              <button type="button" className="btn primary" disabled={lookupBusy || !lookup.trim()} onClick={doLookup}>
+                {lookupBusy ? '…' : 'Look up'}
+              </button>
+            </div>
+            {lookupMsg && <p className="c-dim" style={{ fontSize: 12, marginTop: 8 }}>{lookupMsg}</p>}
+            <p className="c-faint" style={{ fontSize: 11.5, marginTop: 6 }}>
+              Fills name, parameters, datasheet, and pricing from the MPN — or just fill the form in yourself.
+            </p>
+          </div>
+        )}
 
         <L label="Name">
           <input
@@ -179,6 +297,28 @@ export function PartForm({
           />
         </L>
 
+        <div>
+          <span className="eyebrow">Symbol</span>
+          <div className="flex items-center gap-3" style={{ marginTop: 6 }}>
+            <div className="sym-preview">
+              {filePreview ? (
+                <img src={filePreview} alt="" />
+              ) : imagePath ? (
+                <PartGraphic src={imagePath} color={catStyle(category, name).color} size={36} />
+              ) : (
+                // No explicit symbol: show the category default so the box isn't blank.
+                <PartGraphic src={symbolSrc(catStyle(category, name).key)} color={catStyle(category, name).color} size={36} />
+              )}
+            </div>
+            <button type="button" className="btn sm" onClick={() => setPickerOpen(true)}>
+              {imagePath || imageFile ? 'Change' : 'Choose symbol / image'}
+            </button>
+            {(imagePath || imageFile) && (
+              <button type="button" className="btn sm" onClick={clearGraphic}>Remove</button>
+            )}
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <L label="Category">
             <input
@@ -189,9 +329,22 @@ export function PartForm({
               placeholder="Type or pick…"
             />
             <datalist id={catListID}>
-              {categories.map((c) => (
-                <option key={c.id} value={c.name} />
-              ))}
+              {(() => {
+                // The user's real categories first, then the curated starter list
+                // for any name they don't already have (case-insensitive dedup).
+                const have = new Set(categories.map((c) => c.name.toLowerCase()))
+                const extra = CATEGORY_SUGGESTIONS.filter((s) => !have.has(s.toLowerCase()))
+                return (
+                  <>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                    {extra.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </>
+                )
+              })()}
             </datalist>
           </L>
           <L label="Package / footprint">
@@ -199,16 +352,14 @@ export function PartForm({
           </L>
         </div>
 
-        {!isTemplate && (
-          <L label="FireBin PN (your internal part number, used first when matching a BOM)">
-            <input
-              className="input mono"
-              value={ipn}
-              onChange={(e) => setIpn(e.target.value)}
-              placeholder="e.g. FB-R-0603-1K"
-            />
-          </L>
-        )}
+        <L label="FireBin PN (your internal part number, used first when matching a BOM)">
+          <input
+            className="input mono"
+            value={ipn}
+            onChange={(e) => setIpn(e.target.value)}
+            placeholder="e.g. FB-R-0603-1K"
+          />
+        </L>
 
         <L label="Description">
           <input
@@ -219,14 +370,7 @@ export function PartForm({
           />
         </L>
 
-        {!initial?.variant_of && (
-          <label className="flex items-center gap-2 text-sm c-dim">
-            <input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} />
-            This is a template (a grouping that holds variants, e.g. “1k resistor”)
-          </label>
-        )}
-
-        {!isTemplate && (
+        {!editing && (
           <>
             {/* Commercial: MPN creates a manufacturer part; a scan fills these. */}
             <div className="grid grid-cols-2 gap-4">
@@ -297,7 +441,7 @@ export function PartForm({
           </datalist>
         </div>
 
-        {!isTemplate && (
+        {!editing && (
           <div>
             <span className="eyebrow">Initial stock</span>
             <div className="grid grid-cols-2 gap-4" style={{ marginTop: 6 }}>
@@ -322,7 +466,7 @@ export function PartForm({
           <input type="number" className="input" value={minimum} onChange={(e) => setMinimum(e.target.value)} />
         </L>
 
-        {!isTemplate && suppliers.length > 0 && (
+        {!editing && suppliers.length > 0 && (
           <p className="c-faint" style={{ fontSize: 12 }}>
             {suppliers.length} supplier {suppliers.length === 1 ? 'SKU' : 'SKUs'} will be imported:{' '}
             {suppliers.map((s) => s.supplier).join(', ')}.
@@ -337,9 +481,17 @@ export function PartForm({
           Cancel
         </button>
         <button type="submit" disabled={busy || !name.trim()} className="btn primary">
-          {busy ? '…' : submitLabel}
+          {busy ? '…' : saveLabel}
         </button>
       </div>
+
+      {pickerOpen && (
+        <SymbolPicker
+          onPick={(src) => { setImagePath(src); setImageFile(null) }}
+          onUpload={(file) => { setImageFile(file); setImagePath(null) }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </form>
   )
 }
@@ -350,27 +502,27 @@ export function PartFormModal({
   categories,
   initial,
   title = 'Add item',
+  editId,
   onClose,
   onCreated,
 }: {
   categories: Category[]
   initial?: PartDraft
   title?: string
+  editId?: string
   onClose: () => void
   onCreated: (id: string) => void
 }) {
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay">
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <h3>{title}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
+            {icon(mdiClose)}
           </button>
         </div>
-        <PartForm categories={categories} initial={initial} onCancel={onClose} onCreated={onCreated} />
+        <PartForm categories={categories} initial={initial} editId={editId} onCancel={onClose} onCreated={onCreated} />
       </div>
     </div>
   )

@@ -33,6 +33,22 @@ export function usePartsView(): PartsView {
   return usePref(getPartsView)
 }
 
+// ── Parts page size ──────────────────────────────────────────────────────────
+export const PAGE_SIZES = [25, 50, 100, 200] as const
+const PAGE_KEY = 'firebin.partsPageSize'
+
+export function getPageSize(): number {
+  const v = parseInt(localStorage.getItem(PAGE_KEY) || '')
+  return PAGE_SIZES.includes(v as (typeof PAGE_SIZES)[number]) ? v : 50
+}
+export function setPageSize(n: number) {
+  localStorage.setItem(PAGE_KEY, String(n))
+  window.dispatchEvent(new CustomEvent(EVENT))
+}
+export function usePageSize(): number {
+  return usePref(getPageSize)
+}
+
 // ── Hardware (keyboard-wedge) barcode scanner ────────────────────────────────
 const HW_KEY = 'firebin.hardwareScanner'
 
@@ -45,6 +61,19 @@ export function setHardwareScanner(on: boolean) {
 }
 export function useHardwareScanner(): boolean {
   return usePref(getHardwareScanner)
+}
+
+const CAM_KEY = 'firebin.cameraScan'
+
+export function getCameraScan(): boolean {
+  return localStorage.getItem(CAM_KEY) !== 'off' // on by default
+}
+export function setCameraScan(on: boolean) {
+  localStorage.setItem(CAM_KEY, on ? 'on' : 'off')
+  window.dispatchEvent(new CustomEvent(EVENT))
+}
+export function useCameraScan(): boolean {
+  return usePref(getCameraScan)
 }
 
 // usePref subscribes any getter to the prefs-changed + storage events.

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Standalone favicon: just the IC chip, no square, sized to fill the frame so
+       it reads at tab size. Orange so it shows on light and dark browser tabs. -->
+  <g stroke="#FF5A1F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <rect x="13" y="13" width="22" height="22" rx="4"/>
+    <line x1="5" y1="18" x2="13" y2="18"/>
+    <line x1="5" y1="24" x2="13" y2="24"/>
+    <line x1="5" y1="30" x2="13" y2="30"/>
+    <line x1="35" y1="18" x2="43" y2="18"/>
+    <line x1="35" y1="24" x2="43" y2="24"/>
+    <line x1="35" y1="30" x2="43" y2="30"/>
+  </g>
+  <circle cx="18.5" cy="18.5" r="2.1" fill="#FF5A1F"/>
+</svg>

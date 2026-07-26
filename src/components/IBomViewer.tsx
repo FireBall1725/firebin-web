@@ -15,6 +15,8 @@ import {
   type Side,
   type View,
 } from '../lib/ibom'
+import { icon } from '../lib/icons'
+import { mdiClose, mdiChevronRight } from '@mdi/js'
 
 const placedKey = (boardID: string) => `firebin.placed.${boardID}`
 
@@ -221,7 +223,7 @@ export function IBomViewer({
               <span className="pill ghost" style={{ marginLeft: 10 }}>{placedCount}/{allRefs.length} placed</span>
             )}
             <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              {icon(mdiClose)}
             </button>
           </div>
         )}
@@ -266,7 +268,7 @@ export function IBomViewer({
                         <td style={{ paddingRight: 0 }}>
                           {canExpand && (
                             <button className={`ibom-caret ${open ? 'open' : ''}`} onClick={() => toggleExpand(l.id)} aria-label={open ? 'Collapse' : 'Expand'}>
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 6l6 6-6 6" /></svg>
+                              {icon(mdiChevronRight)}
                             </button>
                           )}
                         </td>
@@ -321,7 +323,7 @@ export function IBomViewer({
 
   if (inline) return <div className="viewer ibom-viewer inline">{body}</div>
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay">
       <div className="viewer ibom-viewer" onClick={(e) => e.stopPropagation()}>
         {body}
       </div>

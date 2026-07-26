@@ -8,10 +8,14 @@ import { useRealtime } from '../lib/useRealtime'
 import { BoardThumb } from '../components/BoardThumb'
 import { PartPicker } from '../components/PartPicker'
 import { ProjectFormModal } from '../components/ProjectFormModal'
+import { icon } from '../lib/icons'
+import { mdiChevronLeft, mdiPencilOutline, mdiPlus, mdiTrayArrowUp, mdiClose, mdiExpansionCard } from '@mdi/js'
+import { useAuth } from '../auth/AuthContext'
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const { canWrite } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
   const [assets, setAssets] = useState<ProjectAsset[]>([])
   const [notFound, setNotFound] = useState(false)
@@ -51,7 +55,7 @@ export function ProjectDetailPage() {
   return (
     <div>
       <Link to="/projects" className="btn sm" style={{ marginBottom: 14 }}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
+        {icon(mdiChevronLeft)}
         Projects
       </Link>
 
@@ -68,21 +72,23 @@ export function ProjectDetailPage() {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowEdit(true)} className="btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
-            Edit
-          </button>
-          <button onClick={() => setShowNewBoard(true)} className="btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
-            New board
-          </button>
-          <button onClick={() => setShowUpload(true)} className="btn primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
-            Upload
-          </button>
-          <button onClick={del} className="btn danger">Delete</button>
-        </div>
+        {canWrite && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowEdit(true)} className="btn">
+              {icon(mdiPencilOutline, { size: 15 })}
+              Edit
+            </button>
+            <button onClick={() => setShowNewBoard(true)} className="btn">
+              {icon(mdiPlus)}
+              New board
+            </button>
+            <button onClick={() => setShowUpload(true)} className="btn primary">
+              {icon(mdiTrayArrowUp)}
+              Upload
+            </button>
+            <button onClick={del} className="btn danger">Delete</button>
+          </div>
+        )}
       </div>
 
       {/* Boards */}
@@ -130,12 +136,7 @@ export function ProjectDetailPage() {
 }
 
 function BoardGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" width="42" height="42" style={{ color: 'var(--faint)' }}>
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M7 7h4v4H7zM7 15h.01M11 15h.01M15 15h4v-4h-4M15 7h.01" />
-    </svg>
-  )
+  return icon(mdiExpansionCard, { size: 42, style: { color: 'var(--faint)' } })
 }
 
 // UploadModal is a two-step wizard: drop a file, then map/confirm what was
@@ -211,12 +212,12 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay">
       <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <h3>{preview ? 'Confirm upload' : 'Upload to project'}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            {icon(mdiClose)}
           </button>
         </div>
 
@@ -228,9 +229,7 @@ function UploadModal({ projectID, onClose, onDone }: { projectID: string; onClos
               onDragLeave={() => setDragging(false)}
               onDrop={onDrop}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="26" height="26">
-                <path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-              </svg>
+              {icon(mdiTrayArrowUp, { size: 26 })}
               <div className="dz-title">{busy ? 'Reading…' : dragging ? 'Drop to read' : 'Drag a KiCad file here, or click to browse'}</div>
               <div className="dz-sub" style={{ textAlign: 'left', maxWidth: 440, lineHeight: 1.7 }}>
                 <div><span className="mono">.zip</span> full KiCad project → BOM + interactive layout + renders <span className="c-faint">(best; BOM from the schematic)</span></div>
@@ -371,12 +370,12 @@ function NewBoardModal({ projectID, onClose, onCreated }: { projectID: string; o
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay">
       <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <h3>New board</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            {icon(mdiClose)}
           </button>
         </div>
         <div className="modal-b space-y-3">

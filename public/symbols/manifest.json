@@ -1,0 +1,324 @@
+[
+  {
+    "id": "resistor",
+    "name": "Resistor",
+    "category": "Passives",
+    "standard": "",
+    "filename": "resistor"
+  },
+  {
+    "id": "potentiometer",
+    "name": "Potentiometer",
+    "category": "Passives",
+    "standard": "",
+    "filename": "potentiometer"
+  },
+  {
+    "id": "capacitor",
+    "name": "Capacitor",
+    "category": "Passives",
+    "standard": "",
+    "filename": "capacitor"
+  },
+  {
+    "id": "cap-pol",
+    "name": "Capacitor, polarized",
+    "category": "Passives",
+    "standard": "",
+    "filename": "cap-pol"
+  },
+  {
+    "id": "cap-var",
+    "name": "Capacitor, variable",
+    "category": "Passives",
+    "standard": "",
+    "filename": "cap-var"
+  },
+  {
+    "id": "inductor",
+    "name": "Inductor",
+    "category": "Passives",
+    "standard": "",
+    "filename": "inductor"
+  },
+  {
+    "id": "ferrite",
+    "name": "Ferrite bead",
+    "category": "Passives",
+    "standard": "",
+    "filename": "ferrite"
+  },
+  {
+    "id": "transformer",
+    "name": "Transformer",
+    "category": "Passives",
+    "standard": "",
+    "filename": "transformer"
+  },
+  {
+    "id": "crystal",
+    "name": "Crystal",
+    "category": "Passives",
+    "standard": "",
+    "filename": "crystal"
+  },
+  {
+    "id": "oscillator",
+    "name": "Oscillator",
+    "category": "Passives",
+    "standard": "",
+    "filename": "oscillator"
+  },
+  {
+    "id": "thermistor",
+    "name": "Thermistor",
+    "category": "Passives",
+    "standard": "",
+    "filename": "thermistor"
+  },
+  {
+    "id": "diode",
+    "name": "Diode",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "diode"
+  },
+  {
+    "id": "zener",
+    "name": "Zener diode",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "zener"
+  },
+  {
+    "id": "schottky",
+    "name": "Schottky diode",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "schottky"
+  },
+  {
+    "id": "led",
+    "name": "LED",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "led"
+  },
+  {
+    "id": "photodiode",
+    "name": "Photodiode",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "photodiode"
+  },
+  {
+    "id": "bridge",
+    "name": "Bridge rectifier",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "bridge"
+  },
+  {
+    "id": "transistor-npn",
+    "name": "Transistor (NPN)",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "transistor-npn"
+  },
+  {
+    "id": "transistor-pnp",
+    "name": "Transistor (PNP)",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "transistor-pnp"
+  },
+  {
+    "id": "mosfet-n",
+    "name": "MOSFET (N-ch)",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "mosfet-n"
+  },
+  {
+    "id": "mosfet-p",
+    "name": "MOSFET (P-ch)",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "mosfet-p"
+  },
+  {
+    "id": "scr",
+    "name": "Thyristor (SCR)",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "scr"
+  },
+  {
+    "id": "triac",
+    "name": "Triac",
+    "category": "Semiconductors",
+    "standard": "",
+    "filename": "triac"
+  },
+  {
+    "id": "ic",
+    "name": "IC (generic)",
+    "category": "ICs",
+    "standard": "",
+    "filename": "ic"
+  },
+  {
+    "id": "mcu",
+    "name": "Microcontroller",
+    "category": "ICs",
+    "standard": "",
+    "filename": "mcu"
+  },
+  {
+    "id": "opamp",
+    "name": "Op-amp",
+    "category": "ICs",
+    "standard": "",
+    "filename": "opamp"
+  },
+  {
+    "id": "regulator",
+    "name": "Voltage regulator",
+    "category": "ICs",
+    "standard": "",
+    "filename": "regulator"
+  },
+  {
+    "id": "logic-gate",
+    "name": "Logic gate",
+    "category": "ICs",
+    "standard": "",
+    "filename": "logic-gate"
+  },
+  {
+    "id": "optocoupler",
+    "name": "Optocoupler",
+    "category": "ICs",
+    "standard": "",
+    "filename": "optocoupler"
+  },
+  {
+    "id": "switch",
+    "name": "Switch (SPST)",
+    "category": "Electromechanical",
+    "standard": "",
+    "filename": "switch"
+  },
+  {
+    "id": "pushbutton",
+    "name": "Pushbutton",
+    "category": "Electromechanical",
+    "standard": "",
+    "filename": "pushbutton"
+  },
+  {
+    "id": "switch-spdt",
+    "name": "Switch (SPDT)",
+    "category": "Electromechanical",
+    "standard": "",
+    "filename": "switch-spdt"
+  },
+  {
+    "id": "relay",
+    "name": "Relay",
+    "category": "Electromechanical",
+    "standard": "",
+    "filename": "relay"
+  },
+  {
+    "id": "connector",
+    "name": "Connector",
+    "category": "Electromechanical",
+    "standard": "",
+    "filename": "connector"
+  },
+  {
+    "id": "header",
+    "name": "Header",
+    "category": "Electromechanical",
+    "standard": "",
+    "filename": "header"
+  },
+  {
+    "id": "fuse",
+    "name": "Fuse",
+    "category": "Electromechanical",
+    "standard": "",
+    "filename": "fuse"
+  },
+  {
+    "id": "motor",
+    "name": "Motor",
+    "category": "Transducers",
+    "standard": "",
+    "filename": "motor"
+  },
+  {
+    "id": "speaker",
+    "name": "Speaker",
+    "category": "Transducers",
+    "standard": "",
+    "filename": "speaker"
+  },
+  {
+    "id": "buzzer",
+    "name": "Buzzer",
+    "category": "Transducers",
+    "standard": "",
+    "filename": "buzzer"
+  },
+  {
+    "id": "antenna",
+    "name": "Antenna",
+    "category": "Transducers",
+    "standard": "",
+    "filename": "antenna"
+  },
+  {
+    "id": "lamp",
+    "name": "Lamp",
+    "category": "Transducers",
+    "standard": "",
+    "filename": "lamp"
+  },
+  {
+    "id": "microphone",
+    "name": "Microphone",
+    "category": "Transducers",
+    "standard": "",
+    "filename": "microphone"
+  },
+  {
+    "id": "battery",
+    "name": "Battery",
+    "category": "Power & misc",
+    "standard": "",
+    "filename": "battery"
+  },
+  {
+    "id": "ground",
+    "name": "Ground",
+    "category": "Power & misc",
+    "standard": "",
+    "filename": "ground"
+  },
+  {
+    "id": "test-point",
+    "name": "Test point",
+    "category": "Power & misc",
+    "standard": "",
+    "filename": "test-point"
+  },
+  {
+    "id": "solar-cell",
+    "name": "Solar cell",
+    "category": "Power & misc",
+    "standard": "",
+    "filename": "solar-cell"
+  }
+]

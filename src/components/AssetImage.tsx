@@ -3,6 +3,8 @@
 
 import { useEffect, useState } from 'react'
 import { api, type ProjectAsset } from '../lib/api'
+import { icon } from '../lib/icons'
+import { mdiClose } from '@mdi/js'
 
 // useAssetURL loads an image asset's bytes as an object URL, revoking on unmount.
 function useAssetURL(id: string): string | null {
@@ -55,12 +57,12 @@ export function AssetImg({ assetId, alt }: { assetId: string; alt?: string }) {
 export function ImageViewer({ asset, onClose }: { asset: ProjectAsset; onClose: () => void }) {
   const url = useAssetURL(asset.id)
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay">
       <div className="viewer" onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <h3 className="truncate">{asset.name}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            {icon(mdiClose)}
           </button>
         </div>
         <div className="viewer-body">

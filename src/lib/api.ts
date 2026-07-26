@@ -5,11 +5,14 @@
 // to the Go backend in dev and nginx proxies in production. No generated SDK —
 // the OpenAPI contract is the source of truth and this mirrors it by hand.
 
+export type UserRole = 'admin' | 'member' | 'viewer'
+
 export interface User {
   id: string
   username: string
   email?: string
   display_name?: string
+  role: UserRole
   is_instance_admin: boolean
   is_active: boolean
   created_at: string
@@ -46,6 +49,7 @@ export interface Category {
   description?: string
   created_at: string
   updated_at: string
+  part_count: number
 }
 
 export interface PartParameter {
@@ -296,6 +300,7 @@ export interface PartInput {
   ipn?: string | null
   package?: string | null
   keywords?: string | null
+  image_path?: string | null
   is_template?: boolean
   minimum_stock?: number
   parameters?: ParameterInput[]
@@ -315,6 +320,8 @@ export interface StockItem {
   id: string
   part_id: string
   part_name?: string
+  category_name?: string
+  image_path?: string
   location_id?: string
   location_name?: string
   supplier_part_id?: string
@@ -324,6 +331,9 @@ export interface StockItem {
   purchase_price?: number
   status: string
   note?: string
+  barcode?: string // a barcoded lot (mini spool cut off a reel)
+  name?: string // human label for the lot ("Mini spool #1")
+  split_from?: string
   added_at: string
   updated_at: string
 }
@@ -347,6 +357,8 @@ export interface StockTransaction {
   resulting_quantity: number
   from_location_id?: string
   to_location_id?: string
+  from_location_name?: string
+  to_location_name?: string
   note?: string
   user_id?: string
   created_at: string
@@ -387,17 +399,132 @@ export interface EnrichedPart {
   datasheet_url: string
   image_url: string
   parameters: { name: string; value: string; units?: string }[]
-  suppliers: { name: string; sku: string; prices: PriceBreak[] }[]
+  suppliers: { name: string; sku: string; url?: string; packaging?: string; prices: PriceBreak[] }[]
   source: string
 }
 
-export interface EnrichmentSettings {
+export interface ProviderSettings {
   provider: string
+  label: string
   configured: boolean
+  enabled: boolean
   client_id: string
   secret_set: boolean
-  scope: string
   from_env: boolean
+  scope?: string // nexar only
+}
+
+export interface EnrichmentSettings {
+  providers: ProviderSettings[]
+  currency: string
+}
+
+// LabelMedia is a label sheet geometry (Avery-compatible or custom). All lengths
+// are in PDF points (1pt = 1/72").
+export interface LabelMedia {
+  id: string
+  brand: string
+  code: string
+  name: string
+  page_w: number
+  page_h: number
+  label_w: number
+  label_h: number
+  corner_radius: number
+  cols: number
+  rows: number
+  x0: number
+  y0: number
+  pitch_x: number
+  pitch_y: number
+  cut_guides: boolean
+  kind: string
+  builtin: boolean
+}
+
+// A field a label element can bind to; '' or 'text' means a literal Value.
+export type LabelField =
+  | '' | 'text' | 'name' | 'ipn' | 'package' | 'mpn' | 'manufacturer'
+  | 'location' | 'quantity' | 'description' | 'barcode' | 'qr' | 'param'
+
+export interface LabelElement {
+  type: 'text' | 'qr' | 'barcode' | 'line' | 'rect'
+  field?: LabelField
+  x: number
+  y: number
+  w: number
+  h: number
+  value?: string
+  font?: number
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  align?: 'L' | 'C' | 'R' // horizontal text alignment within the box
+  valign?: 'T' | 'M' | 'B' // vertical text alignment within the box
+  thickness?: number // line / rect stroke weight (pt)
+  filled?: boolean // rect: solid fill vs outline
+  invert?: boolean // text / qr / barcode: white-on-black
+  paramName?: string // for field='param': which part parameter to show
+}
+
+export interface LabelTemplate {
+  id: string
+  name: string
+  label_media_id?: string
+  elements: LabelElement[]
+  created_at: string
+  updated_at: string
+}
+
+// ResolvedLabel is a label with its field bindings filled for a specific part,
+// plus the media geometry — everything the client needs to render it to a canvas.
+export interface ResolvedLabel {
+  label_w: number
+  label_h: number
+  kind: string
+  code: string
+  elements: LabelElement[]
+}
+
+// LabelCatalogEntry is a known label product from the bundled catalogue (not yet
+// in the user's list). Same geometry shape as LabelMedia, minus id/flags.
+export interface LabelCatalogEntry {
+  brand: string
+  code: string
+  name: string
+  page_size: string
+  page_w: number
+  page_h: number
+  label_w: number
+  label_h: number
+  corner_radius: number
+  cols: number
+  rows: number
+  x0: number
+  y0: number
+  pitch_x: number
+  pitch_y: number
+}
+
+// JobTask is a background job's client-facing record.
+export interface JobTask {
+  id: string
+  type: string
+  status: 'queued' | 'running' | 'retrying' | 'completed' | 'failed' | 'cancelling' | 'cancelled'
+  progress_done: number
+  progress_total: number
+  result?: { updated?: number; skipped?: number } & Record<string, unknown>
+  error?: string
+  created_at: string
+}
+
+// JobLog is one line in a task's timeline.
+export interface JobLog {
+  id: number
+  task_id: string
+  ts: string
+  level: string
+  message: string
 }
 
 const BASE = '/api/v1'
@@ -468,15 +595,19 @@ async function tryRefresh(): Promise<boolean> {
   return refreshing
 }
 
-// requestBlob fetches raw bytes (asset content) with auth + refresh, for
-// rendering via object URLs (auth headers can't ride on an <img>/<iframe> src).
-async function requestBlob(path: string, retry = true): Promise<Blob> {
-  const headers = new Headers()
+// requestBlob fetches raw bytes (asset content, generated PDFs) with auth +
+// refresh, for rendering via object URLs (auth headers can't ride on an
+// <img>/<iframe> src).
+async function requestBlob(path: string, options: RequestInit = {}, retry = true): Promise<Blob> {
+  const headers = new Headers(options.headers)
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   const access = tokenStore.access
   if (access) headers.set('Authorization', `Bearer ${access}`)
-  const res = await fetch(`${BASE}${path}`, { headers, cache: 'no-store' })
+  const res = await fetch(`${BASE}${path}`, { ...options, headers, cache: 'no-store' })
   if (res.status === 401 && retry && tokenStore.refresh) {
-    if (await tryRefresh()) return requestBlob(path, false)
+    if (await tryRefresh()) return requestBlob(path, options, false)
   }
   if (!res.ok) return parseError(res)
   return res.blob()
@@ -539,9 +670,6 @@ export const api = {
   me() {
     return request<User>('/me')
   },
-  health() {
-    return request<{ status: string; service: string; version: string }>('/health')
-  },
 
   // ── Personal access tokens ──────────────────────────────────────────────────
   listTokens() {
@@ -566,6 +694,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, parent_id: parentID ?? null }),
     })
+  },
+  deleteCategory(id: string) {
+    return request<{ status: string }>(`/categories/${id}`, { method: 'DELETE' })
   },
 
   // ── Projects & boards ───────────────────────────────────────────────────────
@@ -636,6 +767,11 @@ export const api = {
     form.append('file', file)
     return request<ProjectAsset>(`/boards/${boardID}/assets`, { method: 'POST', body: form })
   },
+  uploadPartImage(partID: string, file: File) {
+    const form = new FormData()
+    form.append('file', file)
+    return request<Part>(`/parts/${partID}/image`, { method: 'POST', body: form })
+  },
   updateBoard(id: string, body: { name?: string; revision?: string; copies?: number }) {
     return request<Board>(`/boards/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
   },
@@ -696,6 +832,32 @@ export const api = {
     return request<{ status: string }>('/stock/move', { method: 'POST', body: JSON.stringify(body) })
   },
 
+  // ── Stock lots (barcoded units, e.g. a mini spool cut off a reel) ────────────
+  getStockItem(id: string) {
+    return request<StockItem>(`/stock-items/${id}`)
+  },
+  scanStockItem(barcode: string) {
+    return request<StockItem>(`/stock/scan?barcode=${encodeURIComponent(barcode)}`)
+  },
+  splitStock(body: { source_id: string; quantity: number; to_location_id?: string | null; name?: string | null; barcode?: string | null }) {
+    return request<StockItem>('/stock/split', { method: 'POST', body: JSON.stringify(body) })
+  },
+  mergeStock(body: { source_id: string; target_id: string }) {
+    return request<{ status: string }>('/stock/merge', { method: 'POST', body: JSON.stringify(body) })
+  },
+  relocateStock(body: { stock_item_id: string; to_location_id?: string | null }) {
+    return request<StockItem>('/stock/relocate', { method: 'POST', body: JSON.stringify(body) })
+  },
+  adjustStockLot(body: { stock_item_id: string; kind: 'add' | 'remove' | 'count'; quantity: number }) {
+    return request<StockItem>('/stock/lot-adjust', { method: 'POST', body: JSON.stringify(body) })
+  },
+  printStockLabels(body: { media_id: string; template_id?: string; stock_item_ids: string[]; copies?: number; used_cells?: number[] }) {
+    return requestBlob('/stock/labels/print', { method: 'POST', body: JSON.stringify(body) })
+  },
+  resolveStockLabel(body: { media_id: string; stock_item_id: string; elements: LabelElement[] }) {
+    return request<ResolvedLabel>('/stock/labels/resolve', { method: 'POST', body: JSON.stringify(body) })
+  },
+
   // ── Locations ───────────────────────────────────────────────────────────────
   listLocations() {
     return request<StorageLocation[]>('/locations')
@@ -709,6 +871,9 @@ export const api = {
   deleteLocation(id: string) {
     return request<{ status: string }>(`/locations/${id}`, { method: 'DELETE' })
   },
+  getLocation(id: string) {
+    return request<StorageLocation>(`/locations/${id}`)
+  },
   scanLocation(barcode: string) {
     return request<StorageLocation>(`/locations/scan?barcode=${encodeURIComponent(barcode)}`)
   },
@@ -716,24 +881,157 @@ export const api = {
     return request<StockItem[]>(`/locations/${id}/stock`)
   },
 
+  // ── System ──────────────────────────────────────────────────────────────────
+  health() {
+    return request<{ status: string; service: string; version: string }>('/health')
+  },
+
+  // ── Users (admin) + self password ─────────────────────────────────────────────
+  listUsers() {
+    return request<User[]>('/users')
+  },
+  createUser(input: { username: string; password: string; role: UserRole; email?: string; display_name?: string }) {
+    return request<User>('/users', { method: 'POST', body: JSON.stringify(input) })
+  },
+  updateUser(id: string, input: { role: UserRole; is_active: boolean; display_name?: string | null }) {
+    return request<User>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+  },
+  resetUserPassword(id: string, password: string) {
+    return request<{ status: string }>(`/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ password }) })
+  },
+  deleteUser(id: string) {
+    return request<{ status: string }>(`/users/${id}`, { method: 'DELETE' })
+  },
+  changeMyPassword(current_password: string, new_password: string) {
+    return request<{ status: string }>('/users/me/password', { method: 'PATCH', body: JSON.stringify({ current_password, new_password }) })
+  },
+
   // ── Scan & enrichment ───────────────────────────────────────────────────────
   scan(code: string) {
     return request<ScanResult>('/scan', { method: 'POST', body: JSON.stringify({ code }) })
   },
   enrichStatus() {
-    return request<{ configured: boolean; provider: string }>('/enrich/status')
+    return request<{ configured: boolean; providers: { provider: string; label: string; configured: boolean }[] }>('/enrich/status')
   },
-  enrich(mpn: string) {
-    return request<{ found: boolean; part?: EnrichedPart }>(`/enrich?mpn=${encodeURIComponent(mpn)}`)
+  enrich(mpn: string, opts?: { refresh?: boolean; providers?: string[] }) {
+    const q = new URLSearchParams({ mpn })
+    if (opts?.refresh) q.set('refresh', '1')
+    if (opts?.providers?.length) q.set('providers', opts.providers.join(','))
+    return request<{ found: boolean; cached?: boolean; part?: EnrichedPart }>(`/enrich?${q.toString()}`)
+  },
+  // Refresh one part from its MPN, applied server-side (same path as bulk).
+  enrichPart(id: string, providers?: string[]) {
+    return request<{ source: string }>(`/parts/${id}/enrich`, { method: 'POST', body: JSON.stringify({ providers: providers ?? [] }) })
+  },
+  exportData() {
+    return requestBlob('/export')
+  },
+  importData(data: unknown) {
+    return request<{ imported: number; by_table: Record<string, number> }>('/import', { method: 'POST', body: JSON.stringify(data) })
   },
   getEnrichmentSettings() {
     return request<EnrichmentSettings>('/settings/enrichment')
   },
-  updateEnrichmentSettings(body: { client_id?: string; client_secret?: string; scope?: string }) {
+  updateEnrichmentSettings(body: { provider?: string; client_id?: string; client_secret?: string; scope?: string; currency?: string; enabled?: boolean }) {
     return request<EnrichmentSettings>('/settings/enrichment', { method: 'PUT', body: JSON.stringify(body) })
   },
-  testEnrichment() {
-    return request<{ ok: boolean }>('/settings/enrichment/test', { method: 'POST' })
+  testEnrichment(provider: string) {
+    return request<{ ok: boolean; provider: string }>('/settings/enrichment/test', { method: 'POST', body: JSON.stringify({ provider }) })
+  },
+  getStockSettings() {
+    return request<{ delete_empty_lots: boolean; empty_lot_count: number }>('/settings/stock')
+  },
+  updateStockSettings(body: { delete_empty_lots: boolean }) {
+    return request<{ delete_empty_lots: boolean; empty_lot_count: number }>('/settings/stock', { method: 'PUT', body: JSON.stringify(body) })
+  },
+  cleanupEmptyLots() {
+    return request<{ enabled: boolean; deleted: number }>('/stock/cleanup-empty', { method: 'POST' })
+  },
+
+  // ── Bulk part actions ───────────────────────────────────────────────────────
+  bulkMoveParts(partIDs: string[], locationID: string | null) {
+    return request<{ moved: number; failed: number }>('/parts/bulk/move', {
+      method: 'POST', body: JSON.stringify({ part_ids: partIDs, location_id: locationID }),
+    })
+  },
+  bulkEnrichParts(partIDs: string[]) {
+    // Enqueues a background job; returns a task id to watch.
+    return request<{ task_id: string }>('/parts/bulk/enrich', {
+      method: 'POST', body: JSON.stringify({ part_ids: partIDs }),
+    })
+  },
+  getTask(id: string) {
+    return request<JobTask>(`/tasks/${id}`)
+  },
+  listTasks(params: { status?: string; type?: string; limit?: number } = {}) {
+    const q = new URLSearchParams()
+    if (params.status) q.set('status', params.status)
+    if (params.type) q.set('type', params.type)
+    if (params.limit) q.set('limit', String(params.limit))
+    return request<JobTask[]>(`/tasks?${q.toString()}`)
+  },
+  getTaskLogs(id: string, afterId = 0) {
+    return request<JobLog[]>(`/tasks/${id}/logs?after_id=${afterId}`)
+  },
+  cancelTask(id: string) {
+    return request<{ status: string }>(`/tasks/${id}/cancel`, { method: 'POST' })
+  },
+  retryTask(id: string) {
+    return request<{ task_id: string }>(`/tasks/${id}/retry`, { method: 'POST' })
+  },
+  clearFinishedTasks() {
+    return request<{ cleared: number }>('/tasks', { method: 'DELETE' })
+  },
+
+  // ── Labels ──────────────────────────────────────────────────────────────────
+  listLabelMedia() {
+    return request<LabelMedia[]>('/labels/media')
+  },
+  searchLabelCatalog(q: string, limit = 60) {
+    return request<LabelCatalogEntry[]>(`/labels/catalog?q=${encodeURIComponent(q)}&limit=${limit}`)
+  },
+  createLabelMedia(body: Partial<LabelMedia>) {
+    return request<LabelMedia>('/labels/media', { method: 'POST', body: JSON.stringify(body) })
+  },
+  deleteLabelMedia(id: string) {
+    return request<{ status: string }>(`/labels/media/${id}`, { method: 'DELETE' })
+  },
+  printLabels(body: {
+    media_id: string
+    template?: string
+    template_id?: string
+    part_ids: string[]
+    copies?: number
+    used_cells?: number[]
+  }) {
+    return requestBlob('/labels/print', { method: 'POST', body: JSON.stringify(body) })
+  },
+  previewLabel(body: { media_id: string; part_id: string; elements: LabelElement[] }) {
+    return requestBlob('/labels/preview', { method: 'POST', body: JSON.stringify(body) })
+  },
+  // resolveLabel fills each element's field binding with the part's value and
+  // returns the concrete elements + media geometry, for client-side canvas
+  // rendering (tape / WebUSB printing). Field resolution stays server-authoritative.
+  resolveLabel(body: { media_id: string; part_id: string; elements: LabelElement[] }) {
+    return request<ResolvedLabel>('/labels/resolve', { method: 'POST', body: JSON.stringify(body) })
+  },
+  printLocationLabels(body: { media_id: string; template_id?: string; location_ids: string[]; copies?: number; used_cells?: number[] }) {
+    return requestBlob('/locations/labels/print', { method: 'POST', body: JSON.stringify(body) })
+  },
+  resolveLocationLabel(body: { media_id: string; location_id: string; elements: LabelElement[] }) {
+    return request<ResolvedLabel>('/locations/labels/resolve', { method: 'POST', body: JSON.stringify(body) })
+  },
+  listLabelTemplates() {
+    return request<LabelTemplate[]>('/labels/templates')
+  },
+  createLabelTemplate(body: { name: string; label_media_id?: string | null; elements: LabelElement[] }) {
+    return request<LabelTemplate>('/labels/templates', { method: 'POST', body: JSON.stringify(body) })
+  },
+  updateLabelTemplate(id: string, body: { name: string; label_media_id?: string | null; elements: LabelElement[] }) {
+    return request<LabelTemplate>(`/labels/templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+  },
+  deleteLabelTemplate(id: string) {
+    return request<{ status: string }>(`/labels/templates/${id}`, { method: 'DELETE' })
   },
 
   // ── Manufacturer / supplier parts ───────────────────────────────────────────
@@ -745,6 +1043,9 @@ export const api = {
   },
   createManufacturerPart(partID: string, body: { manufacturer: string; mpn: string; datasheet_url?: string | null }) {
     return request<ManufacturerPart>(`/parts/${partID}/manufacturer-parts`, { method: 'POST', body: JSON.stringify(body) })
+  },
+  updateManufacturerPart(id: string, body: { manufacturer: string; mpn: string; datasheet_url?: string | null }) {
+    return request<{ status: string }>(`/manufacturer-parts/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
   },
   deleteManufacturerPart(id: string) {
     return request<{ status: string }>(`/manufacturer-parts/${id}`, { method: 'DELETE' })

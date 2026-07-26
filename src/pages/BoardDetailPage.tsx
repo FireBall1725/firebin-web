@@ -10,6 +10,8 @@ import { IBomViewer } from '../components/IBomViewer'
 import { BoardThumb } from '../components/BoardThumb'
 import { AssetThumb, ImageViewer } from '../components/AssetImage'
 import { PartPicker } from '../components/PartPicker'
+import { icon } from '../lib/icons'
+import { mdiChevronLeft, mdiClose, mdiPencilOutline, mdiTrayArrowUp, mdiTrashCanOutline, mdiPrinterOutline, mdiPlus } from '@mdi/js'
 
 type Tab = 'info' | 'bom' | 'layout' | 'assemble'
 
@@ -68,7 +70,7 @@ export function BoardDetailPage() {
   return (
     <div>
       <Link to={`/projects/${projectId}`} className="btn sm" style={{ marginBottom: 14 }}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
+        {icon(mdiChevronLeft)}
         {project?.name ?? 'Project'}
       </Link>
 
@@ -149,7 +151,7 @@ function InfoTab({
         </div>
       </div>
       {big && layoutAsset && (
-        <div className="overlay" onClick={() => setBig(false)}>
+        <div className="overlay">
           <div
             onClick={(e) => e.stopPropagation()}
             style={{ width: 'min(90vw, 1000px)', height: 'min(85vh, 800px)', background: '#0b0e13', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden', position: 'relative' }}
@@ -161,7 +163,7 @@ function InfoTab({
               aria-label="Close"
               style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.4)' }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              {icon(mdiClose)}
             </button>
           </div>
         </div>
@@ -170,7 +172,7 @@ function InfoTab({
         <div className="card-h">
           <h2>Details</h2>
           <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => setEditing(true)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+            {icon(mdiPencilOutline, { size: 14 })}
             Edit
           </button>
         </div>
@@ -223,12 +225,12 @@ function EditBoardModal({ board, onClose, onSaved }: { board: Board; onClose: ()
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay">
       <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <h3>Edit board</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            {icon(mdiClose)}
           </button>
         </div>
         <div className="modal-b space-y-3">
@@ -316,7 +318,7 @@ function FilesCard({
       <div className="card-h">
         <h2>Files</h2>
         <button className="btn sm primary" style={{ marginLeft: 'auto' }} disabled={busy} onClick={() => inputRef.current?.click()}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 16V4M7 9l5-5 5 5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+          {icon(mdiTrayArrowUp)}
           {busy ? 'Uploading…' : 'Upload'}
         </button>
         <input
@@ -371,7 +373,7 @@ function FileTile({ label, sub, onOpen, onDelete, children }: { label: string; s
         onClick={(e) => { e.stopPropagation(); onDelete() }}
         style={{ position: 'absolute', top: 6, right: 6, zIndex: 2, background: 'rgba(0,0,0,0.5)' }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+        {icon(mdiTrashCanOutline, { size: 13 })}
       </button>
       <div className="tile-art" onClick={onOpen}>{children}</div>
       <div className="tile-name truncate" onClick={onOpen}>{label}</div>
@@ -477,7 +479,7 @@ function AssembleTab({ boardID, board, onGoToBom }: { boardID: string; board: Bo
             {board.kind === 'panel' ? `panels (${board.copies}-up)` : 'boards'}
           </label>
           <button className="btn sm" disabled={!pick || entries.length === 0} onClick={() => pick && printPickList(pick)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" /></svg>
+            {icon(mdiPrinterOutline, { size: 15 })}
             Print
           </button>
         </div>
@@ -634,7 +636,7 @@ function BomTab({ board, copies, onChanged }: { board: Board; copies: number; on
       <div className="card-h">
         <h2>Bill of materials</h2>
         <button className="btn sm primary" style={{ marginLeft: 'auto' }} onClick={() => setEditing('new')}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+          {icon(mdiPlus)}
           Add part
         </button>
       </div>
@@ -680,10 +682,10 @@ function BomTab({ board, copies, onChanged }: { board: Board; copies: number; on
               <td className="col-actions">
                 <div className="flex items-center gap-1 justify-end">
                   <button className="icon-btn sm" title="Edit" onClick={() => setEditing(l)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+                    {icon(mdiPencilOutline, { size: 14 })}
                   </button>
                   <button className="icon-btn sm" title="Delete" onClick={() => del(l.id)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+                    {icon(mdiTrashCanOutline, { size: 14 })}
                   </button>
                 </div>
               </td>
@@ -751,12 +753,12 @@ function LineModal({ boardID, line, onClose, onSaved }: { boardID: string; line:
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay">
       <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <h3>{line ? 'Edit part' : 'Add part'}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            {icon(mdiClose)}
           </button>
         </div>
         <div className="modal-b space-y-3">

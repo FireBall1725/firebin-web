@@ -5,6 +5,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
+import { SetupPage } from './pages/SetupPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { PartsPage } from './pages/PartsPage'
 import { PartDetailPage } from './pages/PartDetailPage'
@@ -18,6 +19,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/setup" element={<SetupPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route index element={<DashboardPage />} />

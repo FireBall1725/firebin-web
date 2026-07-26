@@ -641,6 +641,9 @@ async function request<T>(
 
 export const api = {
   // ── Auth ──────────────────────────────────────────────────────────────────
+  getSetupStatus() {
+    return request<{ setup_required: boolean }>('/auth/setup')
+  },
   async register(username: string, password: string, email?: string) {
     const pair = await request<TokenPair>('/auth/register', {
       method: 'POST',

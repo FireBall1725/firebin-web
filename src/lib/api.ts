@@ -929,8 +929,8 @@ export const api = {
   exportData() {
     return requestBlob('/export')
   },
-  importData(data: unknown) {
-    return request<{ imported: number; by_table: Record<string, number> }>('/import', { method: 'POST', body: JSON.stringify(data) })
+  importData(data: unknown, mode: 'merge' | 'replace' = 'merge') {
+    return request<{ imported: number; by_table: Record<string, number>; replaced: boolean }>(`/import?mode=${mode}`, { method: 'POST', body: JSON.stringify(data) })
   },
   getEnrichmentSettings() {
     return request<EnrichmentSettings>('/settings/enrichment')

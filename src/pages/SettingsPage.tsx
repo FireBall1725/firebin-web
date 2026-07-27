@@ -382,7 +382,11 @@ function DataSection() {
     try {
       const data = JSON.parse(await file.text())
       const r = await api.importData(data)
-      setMsg(`Imported ${r.imported} record${r.imported === 1 ? '' : 's'}. Refresh to see them.`)
+      if (r.imported === 0) {
+        setErr('The file was read, but 0 records were added. Import never overwrites, so everything in the file may already exist here; import into a fresh instance for a full restore.')
+      } else {
+        setMsg(`Imported ${r.imported} record${r.imported === 1 ? '' : 's'}. Refresh to see them.`)
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Import failed — is this a FireBin export file?')
     } finally {

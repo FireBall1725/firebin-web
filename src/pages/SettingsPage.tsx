@@ -353,14 +353,76 @@ function ProviderCard({ p, onSaved }: { p: ProviderSettings; onSaved: () => void
   )
 }
 
+// Friendly, ordered labels for the table names in a backup. Order runs from the
+// data people care about most to the plumbing.
+const BACKUP_LABELS: [string, string][] = [
+  ['parts', 'parts'],
+  ['stock_items', 'stock items'],
+  ['stock_transactions', 'stock movements'],
+  ['manufacturers', 'manufacturers'],
+  ['manufacturer_parts', 'manufacturer part numbers'],
+  ['suppliers', 'suppliers'],
+  ['supplier_parts', 'supplier SKUs'],
+  ['supplier_part_pricing', 'price breaks'],
+  ['categories', 'categories'],
+  ['parameter_templates', 'parameter templates'],
+  ['part_parameters', 'part parameters'],
+  ['storage_locations', 'locations'],
+  ['projects', 'projects'],
+  ['project_boards', 'boards'],
+  ['board_bom_lines', 'BOM lines'],
+  ['project_matches', 'project matches'],
+  ['project_assets', 'project assets'],
+  ['label_templates', 'label templates'],
+  ['label_media', 'label media'],
+  ['part_images', 'part images'],
+  ['attachments', 'attachments'],
+  ['users', 'users'],
+  ['api_tokens', 'API tokens'],
+  ['instance_settings', 'settings'],
+]
+
+type Counted = { key: string; label: string; count: number }
+
+// countRows turns a backup table value (an array, or a JSON-encoded array) into a
+// row count without trusting the shape.
+function countRows(v: unknown): number {
+  if (Array.isArray(v)) return v.length
+  if (typeof v === 'string') {
+    try {
+      const a = JSON.parse(v)
+      return Array.isArray(a) ? a.length : 0
+    } catch {
+      return 0
+    }
+  }
+  return 0
+}
+
+// summarize returns the non-empty tables in display order, most meaningful first.
+function summarize(tables: Record<string, unknown>): Counted[] {
+  const out: Counted[] = []
+  for (const [key, label] of BACKUP_LABELS) {
+    const count = countRows(tables[key])
+    if (count > 0) out.push({ key, label, count })
+  }
+  return out
+}
+
+type Staged = { data: { app?: string; format?: number; version?: string; tables: Record<string, unknown> }; summary: Counted[]; date: string }
+type ImportResult = { rows: Counted[]; total: number; replaced: boolean }
+
 function DataSection() {
+  const { logout } = useAuth()
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [staged, setStaged] = useState<Staged | null>(null)
+  const [mode, setMode] = useState<'merge' | 'replace'>('merge')
+  const [result, setResult] = useState<ImportResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const doExport = async () => {
-    setBusy(true); setErr(null); setMsg(null)
+    setBusy(true); setErr(null)
     try {
       const blob = await api.exportData()
       const url = URL.createObjectURL(blob)
@@ -376,22 +438,46 @@ function DataSection() {
     }
   }
 
-  const doImport = async (file: File) => {
-    if (!confirm('Import this backup? Existing records are kept; only records missing from this instance are added.')) return
-    setBusy(true); setErr(null); setMsg(null)
+  const reset = () => {
+    setStaged(null); setResult(null); setErr(null); setMode('merge')
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  // Read and validate the file locally, then show what it holds before touching
+  // anything on the server.
+  const onPick = async (file: File) => {
+    setErr(null); setResult(null)
     try {
       const data = JSON.parse(await file.text())
-      const r = await api.importData(data)
-      if (r.imported === 0) {
-        setErr('The file was read, but 0 records were added. Import never overwrites, so everything in the file may already exist here; import into a fresh instance for a full restore.')
-      } else {
-        setMsg(`Imported ${r.imported} record${r.imported === 1 ? '' : 's'}. Refresh to see them.`)
+      if (data?.app !== 'firebin' || data?.format !== 1 || typeof data?.tables !== 'object') {
+        setErr('That is not a FireBin backup file.')
+        return
       }
+      setStaged({ data, summary: summarize(data.tables), date: new Date(file.lastModified).toLocaleDateString() })
+    } catch {
+      setErr('Could not read that file — it is not valid JSON.')
+    } finally {
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const doRestore = async () => {
+    if (!staged) return
+    if (mode === 'replace' && !confirm('Replace ALL current data with this backup? Everything in this instance is deleted first and cannot be undone. You will be signed out and must log in with the backup’s credentials.')) return
+    setBusy(true); setErr(null)
+    try {
+      const r = await api.importData(staged.data, mode)
+      const rows: Counted[] = []
+      for (const [key, label] of BACKUP_LABELS) {
+        const count = r.by_table?.[key] ?? 0
+        if (count > 0) rows.push({ key, label, count })
+      }
+      setResult({ rows, total: r.imported, replaced: r.replaced })
+      setStaged(null)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Import failed — is this a FireBin export file?')
+      setErr(e instanceof Error ? e.message : 'Restore failed.')
     } finally {
       setBusy(false)
-      if (fileRef.current) fileRef.current.value = ''
     }
   }
 
@@ -404,18 +490,104 @@ function DataSection() {
             A portable JSON snapshot of the whole instance — parts, stock, lots, suppliers, pricing, locations, projects,
             labels, users, and settings. Keep a copy for recovery or for moving to another server.
           </p>
-          <div className="flex flex-wrap gap-2">
-            <button className="btn primary" disabled={busy} onClick={doExport}>{busy ? '…' : 'Export backup (JSON)'}</button>
-            <button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>Import backup…</button>
-            <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f) }} />
-          </div>
-          {msg && <p className="c-good text-sm">{msg}</p>}
+
+          {/* Idle: export + pick-a-file */}
+          {!staged && !result && (
+            <div className="flex flex-wrap gap-2">
+              <button className="btn primary" disabled={busy} onClick={doExport}>{busy ? '…' : 'Export backup (JSON)'}</button>
+              <button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>Import backup…</button>
+              <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f) }} />
+            </div>
+          )}
+
+          {/* Staged: preview contents + choose mode */}
+          {staged && (
+            <div className="card" style={{ background: 'var(--surface-2, rgba(0,0,0,0.02))' }}>
+              <div style={{ padding: 16 }} className="space-y-3">
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600 }}>This backup contains</p>
+                  <p className="c-faint" style={{ margin: '2px 0 0', fontSize: 12 }}>
+                    {staged.data.version ? `From FireBin ${staged.data.version} · ` : ''}saved {staged.date}
+                  </p>
+                </div>
+                {staged.summary.length === 0
+                  ? <p className="c-faint text-sm">The file has no records in it.</p>
+                  : (
+                    <ul style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '4px 16px', margin: 0, padding: 0, listStyle: 'none' }}>
+                      {staged.summary.map((r) => (
+                        <li key={r.key} style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span className="c-faint">{r.label}</span>
+                          <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{r.count.toLocaleString()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                <div className="space-y-2" style={{ borderTop: '1px solid var(--border, rgba(0,0,0,0.1))', paddingTop: 12 }}>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                    <input type="radio" name="importmode" checked={mode === 'merge'} onChange={() => setMode('merge')} style={{ marginTop: 3 }} />
+                    <span>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>Merge</span>
+                      <span className="c-faint" style={{ display: 'block', fontSize: 12 }}>Add only records this instance is missing. Nothing existing is changed. Best for filling gaps in a matching instance.</span>
+                    </span>
+                  </label>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                    <input type="radio" name="importmode" checked={mode === 'replace'} onChange={() => setMode('replace')} style={{ marginTop: 3 }} />
+                    <span>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>Replace <span className="c-crit" style={{ fontWeight: 500 }}>· full restore</span></span>
+                      <span className="c-faint" style={{ display: 'block', fontSize: 12 }}>Delete everything here first, then restore this backup exactly. Use when moving to a new instance. You will be signed out and log in with the backup’s credentials.</span>
+                    </span>
+                  </label>
+                </div>
+
+                {mode === 'replace' && (
+                  <p className="c-crit" style={{ fontSize: 12.5, margin: 0 }}>⚠ This permanently deletes all current data on this instance.</p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn primary" disabled={busy || staged.summary.length === 0} onClick={doRestore}>
+                    {busy ? 'Restoring…' : mode === 'replace' ? 'Delete all and restore' : 'Merge backup'}
+                  </button>
+                  <button className="btn" disabled={busy} onClick={reset}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Result */}
+          {result && (
+            <div className="card" style={{ background: 'var(--surface-2, rgba(0,0,0,0.02))' }}>
+              <div style={{ padding: 16 }} className="space-y-3">
+                <p className="c-good" style={{ margin: 0, fontWeight: 600 }}>
+                  {result.replaced ? 'Restore complete.' : 'Import complete.'} {result.total.toLocaleString()} record{result.total === 1 ? '' : 's'} {result.replaced ? 'restored' : 'added'}.
+                </p>
+                {result.total === 0
+                  ? <p className="c-faint text-sm">Nothing was added — every record in the file already exists here. Use a full restore (Replace) into a fresh instance to recover a whole backup.</p>
+                  : (
+                    <ul style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '4px 16px', margin: 0, padding: 0, listStyle: 'none' }}>
+                      {result.rows.map((r) => (
+                        <li key={r.key} style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span className="c-faint">{r.label}</span>
+                          <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{r.count.toLocaleString()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                <div className="flex flex-wrap gap-2">
+                  {result.replaced
+                    ? <button className="btn primary" onClick={() => logout()}>Sign in with the restored account</button>
+                    : <button className="btn primary" onClick={() => window.location.reload()}>Refresh to see them</button>}
+                  <button className="btn" onClick={reset}>Done</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {err && <p className="c-crit text-sm">{err}</p>}
           <p className="c-faint" style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 640 }}>
             This is an application-level backup, not a replacement for a database backup — if you self-host Postgres, set
-            up your own dump/restore as well. Import only adds records missing by id and never overwrites existing ones,
-            so restore into a fresh instance for a clean recovery.
+            up your own dump/restore as well.
           </p>
         </div>
       </div>

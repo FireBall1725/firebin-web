@@ -252,6 +252,13 @@ const PROVIDER_HELP: Record<string, ReactNode> = {
       secret. Catalogue and prices come back for the Canada site in CAD.
     </>
   ),
+  mouser: (
+    <>
+      Free key from <span className="mono">mouser.com/api-search</span> — one API key, no OAuth app. Limits are 30
+      calls a minute and 1000 a day, so Mouser runs after Digi-Key in the chain. Testing the key costs one of those
+      calls, because Mouser has no separate endpoint to validate credentials against.
+    </>
+  ),
   nexar: (
     <>
       Octopart data across many distributors. Create a free app at <span className="mono">nexar.com</span>
@@ -317,17 +324,22 @@ function ProviderCard({ p, onSaved }: { p: ProviderSettings; onSaved: () => void
           {PROVIDER_HELP[p.provider]}
         </p>
 
-        <label className="fieldlabel"><span>Client ID</span>
-          <input
-            className="input mono" value={clientID}
-            placeholder={p.client_id || 'client id'}
-            onChange={(e) => setClientID(e.target.value)}
-          />
-        </label>
-        <label className="fieldlabel" style={{ marginTop: 10 }}><span>Client secret</span>
+        {/* A key-only provider (Mouser) has no client id, so showing an empty
+            "Client ID" box would just invite someone to paste the key twice. */}
+        {!p.key_only && (
+          <label className="fieldlabel"><span>Client ID</span>
+            <input
+              className="input mono" value={clientID}
+              placeholder={p.client_id || 'client id'}
+              onChange={(e) => setClientID(e.target.value)}
+            />
+          </label>
+        )}
+        <label className="fieldlabel" style={p.key_only ? undefined : { marginTop: 10 }}>
+          <span>{p.key_only ? 'API key' : 'Client secret'}</span>
           <input
             className="input mono" type="password" value={secret}
-            placeholder={p.secret_set ? '•••••••• (leave blank to keep)' : 'client secret'}
+            placeholder={p.secret_set ? '•••••••• (leave blank to keep)' : (p.key_only ? 'api key' : 'client secret')}
             onChange={(e) => setSecret(e.target.value)}
           />
         </label>

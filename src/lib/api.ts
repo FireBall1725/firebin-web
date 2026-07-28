@@ -412,6 +412,9 @@ export interface ProviderSettings {
   secret_set: boolean
   from_env: boolean
   scope?: string // nexar only
+  // Providers that authenticate with a single API key and have no client id
+  // (Mouser). The card renders one field instead of two.
+  key_only?: boolean
 }
 
 export interface EnrichmentSettings {
@@ -961,6 +964,15 @@ export const api = {
     // Enqueues a background job; returns a task id to watch.
     return request<{ task_id: string }>('/parts/bulk/enrich', {
       method: 'POST', body: JSON.stringify({ part_ids: partIDs }),
+    })
+  },
+  // Sets the reorder threshold on many parts at once. A minimum of 0 clears the
+  // threshold rather than meaning "reorder at zero": the low-stock list filters
+  // on minimum_stock > 0. `missing` counts ids the server did not find, which
+  // happens when the selection went stale behind another edit.
+  bulkSetMinimumStock(partIDs: string[], minimumStock: number) {
+    return request<{ updated: number; missing: number }>('/parts/bulk/minimum-stock', {
+      method: 'POST', body: JSON.stringify({ part_ids: partIDs, minimum_stock: minimumStock }),
     })
   },
   getTask(id: string) {

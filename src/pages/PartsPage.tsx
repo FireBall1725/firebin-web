@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, type Part, type Category, type StorageLocation } from '../lib/api'
 import { PartFormModal } from '../components/PartForm'
 import { PrintLabelModal } from '../components/PrintLabelModal'
+import { BulkActionsModal, type BulkAction } from '../components/BulkActionsModal'
 import { useRealtime } from '../lib/useRealtime'
 import { usePartsView, usePageSize, setPageSize } from '../lib/prefs'
 import { PartsTable, PartsGrid, PartsListCards, groupByName } from '../components/PartsViews'
@@ -33,7 +34,7 @@ export function PartsPage() {
   // Bulk selection
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [moveLoc, setMoveLoc] = useState('')
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMsg, setBulkMsg] = useState<string | null>(null)
   const [printOpen, setPrintOpen] = useState(false)
@@ -108,7 +109,7 @@ export function PartsPage() {
     })
   }, [])
 
-  const exitSelect = () => { setSelectMode(false); setSelected(new Set()); setBulkMsg(null); setMoveLoc('') }
+  const exitSelect = () => { setSelectMode(false); setSelected(new Set()); setBulkMsg(null); setBulkOpen(false) }
   const sel = [...selected]
 
   // Every part id across the current filter (all pages), for select-all.
@@ -119,18 +120,59 @@ export function PartsPage() {
     return new Set([...s, ...allIds])
   })
 
-  const doMove = async () => {
+  // The parts behind the current selection, for the modal's summary and so a
+  // future action can reason about what it is changing.
+  const selParts = useMemo(
+    () => groups.flatMap((g) => g.parts).filter((p) => selected.has(p.id)),
+    [groups, selected],
+  )
+
+  // Dispatch for the bulk modal. A discriminated union means a new action added
+  // to BulkActionsModal fails to compile here until it is handled.
+  const runBulk = (action: BulkAction) => {
+    setBulkOpen(false)
+    switch (action.kind) {
+      case 'move': void doMove(action.locationID); break
+      case 'minimumStock': void doSetMinimum(action.minimum); break
+      case 'refresh': void doRefresh(); break
+      case 'labels': setPrintOpen(true); break
+    }
+  }
+
+  const doMove = async (locationID: string | null) => {
     if (!sel.length) return
     setBulkBusy(true)
     setBulkMsg(null)
     try {
-      const r = await api.bulkMoveParts(sel, moveLoc || null)
-      const dest = moveLoc ? (locations.find((l) => l.id === moveLoc)?.name ?? 'location') : 'Unassigned'
+      const r = await api.bulkMoveParts(sel, locationID)
+      const dest = locationID ? (locations.find((l) => l.id === locationID)?.name ?? 'location') : 'Unassigned'
       setBulkMsg(`Moved ${r.moved} part${r.moved === 1 ? '' : 's'} to ${dest}${r.failed ? ` (${r.failed} failed)` : ''}.`)
       setSelected(new Set())
       load()
     } catch {
       setBulkMsg('Move failed.')
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  // Set the reorder threshold across the selection. Zero is a clear, not a
+  // threshold of zero, because the low-stock list filters on minimum_stock > 0;
+  // the confirmation says which of the two happened so nobody has to remember.
+  const doSetMinimum = async (n: number) => {
+    if (!sel.length) return
+    setBulkBusy(true)
+    setBulkMsg(null)
+    try {
+      const r = await api.bulkSetMinimumStock(sel, n)
+      const what = n === 0
+        ? `Cleared the reorder point on ${r.updated} part${r.updated === 1 ? '' : 's'}; they no longer appear in low stock.`
+        : `Set the reorder point to ${n} on ${r.updated} part${r.updated === 1 ? '' : 's'}.`
+      setBulkMsg(`${what}${r.missing ? ` ${r.missing} could not be found; reload and try again.` : ''}`)
+      setSelected(new Set())
+      load()
+    } catch {
+      setBulkMsg('Could not set the reorder point.')
     } finally {
       setBulkBusy(false)
     }
@@ -223,17 +265,18 @@ export function PartsPage() {
               <button className="btn sm" disabled={!allIds.length} onClick={toggleAll}>
                 {allSelected ? 'Deselect all' : `Select all ${allIds.length}`}
               </button>
-              <div className="flex items-center gap-2" style={{ marginLeft: 'auto', flexWrap: 'wrap' }}>
-                {canWrite && (
-                  <select className="input" style={{ width: 150 }} value={moveLoc} onChange={(e) => setMoveLoc(e.target.value)}>
-                    <option value="">Unassigned</option>
-                    {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
-                )}
-                {canWrite && <button className="btn sm" disabled={!sel.length || bulkBusy} onClick={doMove}>Move</button>}
-                {canWrite && <button className="btn sm" disabled={!sel.length || bulkBusy} onClick={doRefresh}>Refresh metadata</button>}
-                <button className="btn sm" disabled={!sel.length} onClick={() => setPrintOpen(true)}>Print labels</button>
+              {/* Only the selection state and one action live here. Every bulk
+                  action is a segment inside BulkActionsModal, so the bar stays
+                  this size however many actions exist. */}
+              <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
                 <button className="btn sm ghost" disabled={!sel.length} onClick={() => setSelected(new Set())}>Clear</button>
+                <button
+                  className="btn sm primary"
+                  disabled={!sel.length || bulkBusy}
+                  onClick={() => setBulkOpen(true)}
+                >
+                  {bulkBusy ? 'Working…' : `Bulk actions${sel.length ? ` (${sel.length})` : ''}`}
+                </button>
               </div>
             </div>
           )}
@@ -280,6 +323,15 @@ export function PartsPage() {
           categories={categories}
           onClose={() => setShowNew(false)}
           onCreated={(id) => { setShowNew(false); navigate(`/parts/${id}`) }}
+        />
+      )}
+      {bulkOpen && (
+        <BulkActionsModal
+          parts={selParts}
+          locations={locations}
+          canWrite={canWrite}
+          onApply={runBulk}
+          onClose={() => setBulkOpen(false)}
         />
       )}
       {printOpen && (

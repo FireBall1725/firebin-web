@@ -707,6 +707,12 @@ export interface KicadSuggestions {
   notes?: string[]
 }
 
+export interface KicadUsage {
+  part_id: string
+  part_name: string
+  category?: string
+}
+
 export interface KicadDrawing {
   kind: 'symbol' | 'footprint'
   bbox: { minx: number; miny: number; maxx: number; maxy: number }
@@ -905,6 +911,11 @@ export const api = {
   searchKicadLibrary(kind: 'symbol' | 'footprint', q: string) {
     return request<KicadLibraryItem[]>(
       `/kicad/libraries/search?kind=${kind}&q=${encodeURIComponent(q)}`,
+    )
+  },
+  kicadUsage(kind: 'symbol' | 'footprint', libID: string) {
+    return request<KicadUsage[]>(
+      `/kicad/libraries/usage?kind=${kind}&lib_id=${encodeURIComponent(libID)}`,
     )
   },
   kicadSuggestions(partID: string) {

@@ -913,6 +913,18 @@ export const api = {
       `/kicad/libraries/search?kind=${kind}&q=${encodeURIComponent(q)}`,
     )
   },
+  uploadKicadBatch(scanID: string, items: { kind: string; lib: string; name: string; source?: string }[]) {
+    return request<{ stored: number }>('/kicad/libraries/batch', {
+      method: 'POST',
+      body: JSON.stringify({ scan_id: scanID, items }),
+    })
+  },
+  finishKicadScan(scanID: string, source: string, kicadVersion?: string) {
+    return request<KicadIndexStatus['meta']>('/kicad/libraries/finish', {
+      method: 'POST',
+      body: JSON.stringify({ scan_id: scanID, source, kicad_version: kicadVersion ?? '' }),
+    })
+  },
   kicadUsage(kind: 'symbol' | 'footprint', libID: string) {
     return request<KicadUsage[]>(
       `/kicad/libraries/usage?kind=${kind}&lib_id=${encodeURIComponent(libID)}`,

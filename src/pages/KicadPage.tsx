@@ -11,6 +11,8 @@ import {
   type KicadUsage,
 } from '../lib/api'
 import { KicadDrawingView } from '../components/KicadDrawingView'
+import { KicadScanModal } from '../components/KicadScanModal'
+import { useAuth } from '../auth/AuthContext'
 import { num } from '../lib/format'
 
 type Kind = 'symbol' | 'footprint'
@@ -22,6 +24,10 @@ function mb(bytes: number) {
 /** Browse the uploaded copy of the user's KiCad libraries: what was imported,
  *  where it came from, what each item looks like, and which parts use it. */
 export function KicadPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const [scanning, setScanning] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [status, setStatus] = useState<KicadIndexStatus | null>(null)
   const [kind, setKind] = useState<Kind>('symbol')
   const [libs, setLibs] = useState<KicadLibrarySummary[]>([])
@@ -35,14 +41,14 @@ export function KicadPage() {
 
   useEffect(() => {
     api.kicadIndexStatus().then(setStatus).catch(() => setStatus({ scanned: false }))
-  }, [])
+  }, [reloadKey])
 
   useEffect(() => {
     setLib(null)
     setItems([])
     setSelected(null)
     api.listKicadLibraries(kind).then(setLibs).catch(() => setLibs([]))
-  }, [kind])
+  }, [kind, reloadKey])
 
   useEffect(() => {
     if (!lib) return
@@ -91,7 +97,15 @@ export function KicadPage() {
             custom libraries come across too. Those are the ones worth having: a KiCad install
             can always be reinstalled, your own footprints cannot.
           </p>
+          {isAdmin && (
+            <button className="btn primary" style={{ marginTop: 14 }} onClick={() => setScanning(true)}>
+              Import from this browser instead
+            </button>
+          )}
         </div>
+        {scanning && (
+          <KicadScanModal onClose={() => setScanning(false)} onDone={() => setReloadKey((k) => k + 1)} />
+        )}
       </div>
     )
   }
@@ -122,6 +136,16 @@ export function KicadPage() {
           </div>
         )}
       </div>
+
+      {isAdmin && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <button className="btn sm" onClick={() => setScanning(true)}>Re-import…</button>
+        </div>
+      )}
+
+      {scanning && (
+        <KicadScanModal onClose={() => setScanning(false)} onDone={() => setReloadKey((k) => k + 1)} />
+      )}
 
       <div className="tabs" style={{ marginBottom: 14 }}>
         {(['symbol', 'footprint'] as Kind[]).map((k) => (

@@ -39,6 +39,7 @@ export function KicadPicker({
   const [searched, setSearched] = useState(false)
   const debounced = useDebounced(query, 200)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -73,8 +74,9 @@ export function KicadPicker({
     if (pick) onPick(pick)
   }
 
-  // Arrow keys move through results without leaving the search box, the way
-  // every other chooser behaves.
+  // The handler sits on the modal, not the input. Clicking a result moves focus
+  // to that button, and an input-only handler stops firing the moment it does —
+  // which reads as "the arrows just don't work".
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return
     if (e.key === 'Enter') {
@@ -89,9 +91,23 @@ export function KicadPicker({
     if (item) setSelected(`${item.lib}:${item.name}`)
   }
 
+  // Keep the keyboard-selected row visible; without this the highlight walks
+  // off the bottom of the scroll box.
+  useEffect(() => {
+    if (!selected) return
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-libid="${CSS.escape(selected)}"]`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [selected])
+
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 860 }} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        style={{ maxWidth: 860 }}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
         <div className="modal-h">
           <h3>Choose KiCad {kind}</h3>
           <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
@@ -105,12 +121,12 @@ export function KicadPicker({
             className="input mono"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={onKeyDown}
             placeholder={kind === 'symbol' ? 'e.g. Device:R, or ESP32' : 'e.g. 0603, or TSSOP-24'}
           />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, minHeight: 320 }}>
             <div
+              ref={listRef}
               style={{
                 border: '1px solid var(--border)',
                 borderRadius: 10,
@@ -133,6 +149,7 @@ export function KicadPicker({
                   return (
                     <button
                       key={libID}
+                      data-libid={libID}
                       type="button"
                       onClick={() => setSelected(libID)}
                       onDoubleClick={() => confirm(libID)}

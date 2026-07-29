@@ -13,6 +13,7 @@
   "nav": {
     "apiTokens": "API Tokens",
     "dashboard": "Dashboard",
+    "kicad": "KiCad",
     "locations": "Locations",
     "parts": "Parts",
     "projects": "Projects",

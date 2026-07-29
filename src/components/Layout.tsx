@@ -16,22 +16,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { api, type Category } from '../lib/api'
 import { parseFirebinPartLink, resolveFirebinPart, parseFirebinLocationLink, resolveFirebinLocation, parseFirebinStockLink, resolveFirebinStock } from '../lib/deepLink'
-import {
-  mdiViewDashboardOutline,
-  mdiFormatListBulletedSquare,
-  mdiMapMarkerOutline,
-  mdiFolderOutline,
-  mdiCogOutline,
-  mdiMenu,
-  mdiMagnify,
-  mdiBarcodeScan,
-  mdiChevronDown,
-  mdiCameraOutline,
-  mdiPlus,
-  mdiFormatListChecks,
-  mdiWhiteBalanceSunny,
-  mdiWeatherNight,
-} from '@mdi/js'
+import { mdiBarcodeScan, mdiCameraOutline, mdiChevronDown, mdiCogOutline, mdiFolderOutline, mdiFormatListBulletedSquare, mdiFormatListChecks, mdiMagnify, mdiMapMarkerOutline, mdiMenu, mdiPlus, mdiVectorSquare, mdiViewDashboardOutline, mdiWeatherNight, mdiWhiteBalanceSunny } from '@mdi/js'
 import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 import { useHardwareScanner, useCameraScan } from '../lib/prefs'
 import { currentMode, toggleMode } from '../lib/themes'
@@ -43,6 +28,7 @@ const nav: NavDef[] = [
   { to: '/parts', labelKey: 'nav.parts', icon: icon(mdiFormatListBulletedSquare) },
   { to: '/locations', labelKey: 'nav.locations', icon: icon(mdiMapMarkerOutline) },
   { to: '/projects', labelKey: 'nav.projects', icon: icon(mdiFolderOutline) },
+  { to: '/kicad', labelKey: 'nav.kicad', icon: icon(mdiVectorSquare) },
   { to: '/settings', labelKey: 'nav.settings', icon: icon(mdiCogOutline) },
 ]
 
@@ -54,6 +40,7 @@ function crumbFor(path: string): [string, string] {
   if (path.startsWith('/locations')) return ['Inventory', 'Locations']
   if (path.startsWith('/projects/')) return ['Projects · Boards', 'Project']
   if (path.startsWith('/projects')) return ['Workspace', 'Projects']
+  if (path.startsWith('/kicad')) return ['Workspace', 'KiCad libraries']
   if (path.startsWith('/settings')) return ['Workspace', 'Settings']
   return ['Workspace', 'FireBin']
 }

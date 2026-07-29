@@ -2,6 +2,8 @@
 // Copyright (C) 2026 FireBall1725
 
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
+import { KicadPicker } from './KicadPicker'
+import { KicadSuggestModal } from './KicadSuggestModal'
 import {
   api,
   type Category,
@@ -37,6 +39,8 @@ export interface PartDraft {
   name?: string
   category?: string
   package?: string
+  kicad_symbol?: string
+  kicad_footprint?: string
   ipn?: string
   description?: string
   image_path?: string
@@ -84,6 +88,10 @@ export function PartForm({
   const [name, setName] = useState(initial?.name ?? '')
   const [category, setCategory] = useState(initial?.category ?? '')
   const [pkg, setPkg] = useState(initial?.package ?? '')
+  const [kicadSymbol, setKicadSymbol] = useState(initial?.kicad_symbol ?? '')
+  const [kicadFootprint, setKicadFootprint] = useState(initial?.kicad_footprint ?? '')
+  const [picking, setPicking] = useState<'symbol' | 'footprint' | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
   const [ipn, setIpn] = useState(initial?.ipn ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [minimum, setMinimum] = useState(String(initial?.minimum_stock ?? 0))
@@ -199,6 +207,8 @@ export function PartForm({
           variant_of: initial?.variant_of ?? null,
           ipn: ipn.trim() || null,
           package: pkg || null,
+          kicad_symbol: kicadSymbol.trim() || null,
+          kicad_footprint: kicadFootprint.trim() || null,
           description: description || null,
           image_path: imagePath,
           is_template: false,
@@ -216,6 +226,8 @@ export function PartForm({
         variant_of: initial?.variant_of ?? null,
         ipn: ipn.trim() || null,
         package: pkg || null,
+        kicad_symbol: kicadSymbol.trim() || null,
+        kicad_footprint: kicadFootprint.trim() || null,
         description: description || null,
         image_path: imageFile ? null : imagePath,
         is_template: false,
@@ -351,6 +363,83 @@ export function PartForm({
             <input className="input" value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="0603" />
           </L>
         </div>
+
+        {/* KiCad library IDs. These are what the HTTP library serves to KiCad so
+            the part can be placed from the Symbol Chooser; both must name a
+            library already installed on the machine running KiCad. Leaving them
+            blank is fine — the part still shows up, flagged as unmapped.
+
+            The field stays editable for pasting, but the Browse button is the
+            path that works: these identifiers are long, exact, and impossible to
+            recall, and a typo degrades silently to a placeholder in KiCad. */}
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="eyebrow">KiCad</span>
+            {/* Only offered when editing: the strongest evidence is the boards
+                this part already appears on, which needs a saved part id. */}
+            {editing && (
+              <button
+                type="button"
+                onClick={() => setSuggesting(true)}
+                className="link"
+                style={{ fontSize: 12 }}
+              >
+                Suggest from my designs
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+          <L label="KiCad symbol (library ID)">
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="input mono"
+                style={{ flex: 1, minWidth: 0 }}
+                value={kicadSymbol}
+                onChange={(e) => setKicadSymbol(e.target.value)}
+                placeholder="Device:R"
+              />
+              <button type="button" className="btn" onClick={() => setPicking('symbol')}>Browse…</button>
+            </div>
+          </L>
+          <L label="KiCad footprint (library ID)">
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="input mono"
+                style={{ flex: 1, minWidth: 0 }}
+                value={kicadFootprint}
+                onChange={(e) => setKicadFootprint(e.target.value)}
+                placeholder="Resistor_SMD:R_0603_1608Metric"
+              />
+              <button type="button" className="btn" onClick={() => setPicking('footprint')}>Browse…</button>
+            </div>
+          </L>
+          </div>
+        </div>
+
+        {suggesting && editId && (
+          <KicadSuggestModal
+            partID={editId}
+            onClose={() => setSuggesting(false)}
+            onApply={(kind, libID) => {
+              if (kind === 'symbol') setKicadSymbol(libID)
+              else setKicadFootprint(libID)
+            }}
+          />
+        )}
+
+        {picking && (
+          <KicadPicker
+            kind={picking}
+            initial={picking === 'symbol' ? kicadSymbol : kicadFootprint}
+            onClose={() => setPicking(null)}
+            onPick={(libID) => {
+              if (picking === 'symbol') setKicadSymbol(libID)
+              else setKicadFootprint(libID)
+              setPicking(null)
+            }}
+          />
+        )}
 
         <L label="FireBin PN (your internal part number, used first when matching a BOM)">
           <input

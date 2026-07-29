@@ -12,6 +12,7 @@ import {
   type Category,
   type AdjustKind,
 } from '../lib/api'
+import { KicadDrawingView } from '../components/KicadDrawingView'
 import { PartFormModal } from '../components/PartForm'
 import { PartThumb, CatChip } from '../components/PartsViews'
 import { ManufacturerParts } from '../components/ManufacturerParts'
@@ -35,7 +36,7 @@ export function PartDetailPage() {
   const [notFound, setNotFound] = useState(false)
   const [addVariant, setAddVariant] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [tab, setTab] = useState<'overview' | 'stock' | 'suppliers' | 'history'>('overview')
+  const [tab, setTab] = useState<'overview' | 'stock' | 'suppliers' | 'history' | 'kicad'>('overview')
   const [printing, setPrinting] = useState(false)
   const [enriching, setEnriching] = useState(false)
   const [enrichMsg, setEnrichMsg] = useState<string | null>(null)
@@ -229,6 +230,8 @@ export function PartDetailPage() {
             name: part.name,
             category: categories.find((c) => c.id === part.category_id)?.name ?? '',
             package: part.package ?? '',
+            kicad_symbol: part.kicad_symbol ?? '',
+            kicad_footprint: part.kicad_footprint ?? '',
             ipn: part.ipn ?? '',
             description: part.description ?? '',
             variant_of: part.variant_of,
@@ -251,6 +254,7 @@ export function PartDetailPage() {
           ...(!isTemplate ? [{ id: 'stock' as const, label: 'Stock' }] : []),
           { id: 'suppliers', label: 'Suppliers & pricing' },
           { id: 'history', label: 'History' },
+          { id: 'kicad', label: 'KiCad' },
         ] as { id: typeof tab; label: string }[]).map((t) => (
           <button key={t.id} className={`tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
             {t.label}
@@ -357,6 +361,40 @@ export function PartDetailPage() {
       )}
 
       </>)}
+
+
+      {tab === 'kicad' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Section title="Symbol">
+            <KicadDrawingView kind="symbol" libID={part.kicad_symbol} height={260} />
+            <div style={{ padding: '10px 14px', borderTop: '1px solid var(--line)' }}>
+              <div className="c-dim" style={{ fontSize: 12 }}>Library ID</div>
+              <div className="mono" style={{ wordBreak: 'break-all' }}>
+                {part.kicad_symbol || <span className="c-dim">not set</span>}
+              </div>
+            </div>
+          </Section>
+
+          <Section title="Footprint">
+            <KicadDrawingView kind="footprint" libID={part.kicad_footprint} height={260} />
+            <div style={{ padding: '10px 14px', borderTop: '1px solid var(--line)' }}>
+              <div className="c-dim" style={{ fontSize: 12 }}>Library ID</div>
+              <div className="mono" style={{ wordBreak: 'break-all' }}>
+                {part.kicad_footprint || <span className="c-dim">not set</span>}
+              </div>
+            </div>
+          </Section>
+
+          {(!part.kicad_symbol || !part.kicad_footprint) && (
+            <div className="banner" style={{ gridColumn: '1 / -1', fontSize: 13 }}>
+              {/* Unmapped parts still reach KiCad, they just cannot be placed, so
+                  say what the consequence is rather than only what is missing. */}
+              This part appears in the KiCad library but cannot be placed until both
+              IDs are set. Use Edit to add them.
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === 'history' && (
       <Section title="Stock history">

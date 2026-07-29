@@ -209,6 +209,8 @@ export interface Part {
   description?: string
   ipn?: string
   package?: string
+  kicad_symbol?: string
+  kicad_footprint?: string
   keywords?: string
   barcode?: string
   image_path?: string
@@ -299,6 +301,8 @@ export interface PartInput {
   description?: string | null
   ipn?: string | null
   package?: string | null
+  kicad_symbol?: string | null
+  kicad_footprint?: string | null
   keywords?: string | null
   image_path?: string | null
   is_template?: boolean
@@ -642,6 +646,57 @@ async function request<T>(
   return res.json() as Promise<T>
 }
 
+
+// ── KiCad libraries ───────────────────────────────────────────────────────────
+
+export interface KicadLibraryItem {
+  kind: 'symbol' | 'footprint'
+  lib: string
+  name: string
+  has_source: boolean
+}
+
+export interface KicadLibrarySummary {
+  kind: 'symbol' | 'footprint'
+  lib: string
+  count: number
+  with_source: number
+}
+
+export interface KicadIndexStatus {
+  scanned: boolean
+  meta?: {
+    source: string
+    kicad_version?: string
+    scanned_at: string
+    symbol_count: number
+    footprint_count: number
+    bytes_stored: number
+  }
+}
+
+/** One primitive of a rendered symbol or footprint. Already in screen space
+ *  (Y down), with arcs and rectangles flattened to polylines by the server. */
+export interface KicadDrawItem {
+  type: 'line' | 'circle' | 'pad'
+  points?: [number, number][]
+  center?: [number, number]
+  r?: number
+  w?: number
+  size?: [number, number]
+  shape?: string
+  angle?: number
+  layer?: string
+  drill?: number
+  fill?: string
+}
+
+export interface KicadDrawing {
+  kind: 'symbol' | 'footprint'
+  bbox: { minx: number; miny: number; maxx: number; maxy: number }
+  items: KicadDrawItem[]
+}
+
 export const api = {
   // ── Auth ──────────────────────────────────────────────────────────────────
   getSetupStatus() {
@@ -816,6 +871,30 @@ export const api = {
   },
   deletePart(id: string) {
     return request<{ status: string }>(`/parts/${id}`, { method: 'DELETE' })
+  },
+
+
+  // ── KiCad libraries ─────────────────────────────────────────────────────────
+  kicadIndexStatus() {
+    return request<KicadIndexStatus>('/kicad/libraries/status')
+  },
+  listKicadLibraries(kind?: 'symbol' | 'footprint') {
+    return request<KicadLibrarySummary[]>(`/kicad/libraries${kind ? `?kind=${kind}` : ''}`)
+  },
+  listKicadLibraryItems(kind: 'symbol' | 'footprint', lib: string) {
+    return request<KicadLibraryItem[]>(
+      `/kicad/libraries/items?kind=${kind}&lib=${encodeURIComponent(lib)}`,
+    )
+  },
+  searchKicadLibrary(kind: 'symbol' | 'footprint', q: string) {
+    return request<KicadLibraryItem[]>(
+      `/kicad/libraries/search?kind=${kind}&q=${encodeURIComponent(q)}`,
+    )
+  },
+  kicadDrawing(kind: 'symbol' | 'footprint', libID: string) {
+    return request<KicadDrawing>(
+      `/kicad/libraries/drawing?kind=${kind}&lib_id=${encodeURIComponent(libID)}`,
+    )
   },
 
   // ── Stock ───────────────────────────────────────────────────────────────────

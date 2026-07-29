@@ -691,6 +691,22 @@ export interface KicadDrawItem {
   fill?: string
 }
 
+export interface KicadSuggestion {
+  lib_id: string
+  /** Where the candidate came from: a shipped board, an MPN name match, or a
+   *  category/package rule. Determines how much it can be trusted. */
+  source: 'bom' | 'mpn' | 'category' | 'package'
+  detail?: string
+  confidence: number
+}
+
+export interface KicadSuggestions {
+  symbols: KicadSuggestion[]
+  footprints: KicadSuggestion[]
+  /** Anything deliberately withheld, and why. */
+  notes?: string[]
+}
+
 export interface KicadDrawing {
   kind: 'symbol' | 'footprint'
   bbox: { minx: number; miny: number; maxx: number; maxy: number }
@@ -890,6 +906,9 @@ export const api = {
     return request<KicadLibraryItem[]>(
       `/kicad/libraries/search?kind=${kind}&q=${encodeURIComponent(q)}`,
     )
+  },
+  kicadSuggestions(partID: string) {
+    return request<KicadSuggestions>(`/parts/${partID}/kicad/suggestions`)
   },
   kicadDrawing(kind: 'symbol' | 'footprint', libID: string) {
     return request<KicadDrawing>(

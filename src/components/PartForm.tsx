@@ -3,6 +3,7 @@
 
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import { KicadPicker } from './KicadPicker'
+import { KicadSuggestModal } from './KicadSuggestModal'
 import {
   api,
   type Category,
@@ -90,6 +91,7 @@ export function PartForm({
   const [kicadSymbol, setKicadSymbol] = useState(initial?.kicad_symbol ?? '')
   const [kicadFootprint, setKicadFootprint] = useState(initial?.kicad_footprint ?? '')
   const [picking, setPicking] = useState<'symbol' | 'footprint' | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
   const [ipn, setIpn] = useState(initial?.ipn ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [minimum, setMinimum] = useState(String(initial?.minimum_stock ?? 0))
@@ -370,7 +372,24 @@ export function PartForm({
             The field stays editable for pasting, but the Browse button is the
             path that works: these identifiers are long, exact, and impossible to
             recall, and a typo degrades silently to a placeholder in KiCad. */}
-        <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="eyebrow">KiCad</span>
+            {/* Only offered when editing: the strongest evidence is the boards
+                this part already appears on, which needs a saved part id. */}
+            {editing && (
+              <button
+                type="button"
+                onClick={() => setSuggesting(true)}
+                className="link"
+                style={{ fontSize: 12 }}
+              >
+                Suggest from my designs
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
           <L label="KiCad symbol (library ID)">
             <div style={{ display: 'flex', gap: 8 }}>
               <input
@@ -395,7 +414,19 @@ export function PartForm({
               <button type="button" className="btn" onClick={() => setPicking('footprint')}>Browse…</button>
             </div>
           </L>
+          </div>
         </div>
+
+        {suggesting && editId && (
+          <KicadSuggestModal
+            partID={editId}
+            onClose={() => setSuggesting(false)}
+            onApply={(kind, libID) => {
+              if (kind === 'symbol') setKicadSymbol(libID)
+              else setKicadFootprint(libID)
+            }}
+          />
+        )}
 
         {picking && (
           <KicadPicker

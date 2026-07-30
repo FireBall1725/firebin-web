@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   api,
   type KicadIndexStatus,
@@ -38,22 +38,42 @@ export function KicadPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [usage, setUsage] = useState<KicadUsage[]>([])
   const [loadingItems, setLoadingItems] = useState(false)
+  const itemsRef = useRef<HTMLDivElement>(null)
+  const [params, setParams] = useSearchParams()
+
+  // Deep link: /kicad?kind=symbol&lib_id=Device:R. Lets the command palette
+  // hand off straight to a preview instead of dropping the user on an empty
+  // three-pane page to find it again.
+  useEffect(() => {
+    const k = params.get('kind')
+    const libID = params.get('lib_id')
+    if (k !== 'symbol' && k !== 'footprint') return
+    if (!libID || !libID.includes(':')) return
+    setKind(k)
+    setLib(libID.slice(0, libID.indexOf(':')))
+    setSelected(libID)
+    // Consume the params so a later manual click is not overridden by a stale
+    // URL on the next render.
+    setParams({}, { replace: true })
+  }, [params, setParams])
 
   useEffect(() => {
     api.kicadIndexStatus().then(setStatus).catch(() => setStatus({ scanned: false }))
   }, [reloadKey])
 
+  // Deliberately does not clear `lib`/`selected`: switching kind does, but a
+  // deep link sets kind and selection together and must survive this.
   useEffect(() => {
-    setLib(null)
-    setItems([])
-    setSelected(null)
     api.listKicadLibraries(kind).then(setLibs).catch(() => setLibs([]))
   }, [kind, reloadKey])
 
   useEffect(() => {
     if (!lib) return
     setLoadingItems(true)
-    setSelected(null)
+    // Clear the selection only when it belongs to another library. A deep link
+    // sets `lib` and `selected` in one commit, so clearing unconditionally here
+    // wiped the selection before the preview could ever load.
+    setSelected((s) => (s?.startsWith(`${lib}:`) ? s : null))
     api
       .listKicadLibraryItems(kind, lib)
       .then(setItems)
@@ -81,6 +101,35 @@ export function KicadPage() {
     const list = q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items
     return list.slice(0, 400)
   }, [items, itemFilter])
+
+  // Arrow keys walk the item list from anywhere on the page, so a preview can be
+  // stepped through without reaching for the mouse. The handler sits on the page
+  // container rather than the list: clicking a row moves focus to that button,
+  // and a list-scoped handler would stop firing the moment it did.
+  const onPageKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    // Leave the filter inputs alone — there, arrows mean caret movement.
+    const tag = (e.target as HTMLElement).tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return
+    if (shownItems.length === 0) return
+    e.preventDefault()
+    const idx = shownItems.findIndex((i) => `${i.lib}:${i.name}` === selected)
+    const next = e.key === 'ArrowDown' ? idx + 1 : idx - 1
+    const it = shownItems[Math.max(0, Math.min(shownItems.length - 1, next))]
+    if (it) setSelected(`${it.lib}:${it.name}`)
+  }
+
+  // Keep the keyboard-selected row visible; without this the highlight walks off
+  // the bottom of the scroll box.
+  useEffect(() => {
+    if (!selected) return
+    itemsRef.current
+      ?.querySelector<HTMLElement>(`[data-libid="${CSS.escape(selected)}"]`)
+      ?.scrollIntoView({ block: 'nearest' })
+    // `shownItems` is a dependency because a deep link sets `selected` before
+    // the item fetch resolves. Keyed on `selected` alone, the row does not exist
+    // in the DOM yet and the list stays parked at the top.
+  }, [selected, shownItems])
 
   if (status && !status.scanned) {
     return (
@@ -111,7 +160,9 @@ export function KicadPage() {
   }
 
   return (
-    <div>
+    // tabIndex makes the container focusable so it receives key events even
+    // before anything inside it has been clicked.
+    <div onKeyDown={onPageKeyDown} tabIndex={-1} style={{ outline: 'none' }}>
       <div className="flex flex-wrap items-end justify-between gap-4" style={{ marginBottom: 16 }}>
         <div>
           <span className="eyebrow">Workspace</span>
@@ -149,7 +200,11 @@ export function KicadPage() {
 
       <div className="tabs" style={{ marginBottom: 14 }}>
         {(['symbol', 'footprint'] as Kind[]).map((k) => (
-          <button key={k} className={`tab ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>
+          <button
+            key={k}
+            className={`tab ${kind === k ? 'on' : ''}`}
+            onClick={() => { setKind(k); setLib(null); setItems([]); setSelected(null) }}
+          >
             {k === 'symbol' ? 'Symbols' : 'Footprints'}
           </button>
         ))}
@@ -203,7 +258,7 @@ export function KicadPage() {
               disabled={!lib}
             />
           </div>
-          <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+          <div ref={itemsRef} style={{ maxHeight: 520, overflowY: 'auto' }}>
             {!lib && <p className="c-dim" style={{ padding: 12, fontSize: 13 }}>Choose a library on the left.</p>}
             {lib && loadingItems && <p className="c-dim" style={{ padding: 12, fontSize: 13 }}>Loading…</p>}
             {shownItems.map((it) => {
@@ -211,6 +266,7 @@ export function KicadPage() {
               return (
                 <button
                   key={libID}
+                  data-libid={libID}
                   onClick={() => setSelected(libID)}
                   className="mono"
                   style={{

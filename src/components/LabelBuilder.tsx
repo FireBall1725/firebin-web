@@ -21,7 +21,12 @@ import { tapeGeomForMm, tapeWidthMmFromCode, dotsPerPt } from '../lib/brotherPto
 const FIELDS: { value: LabelField; label: string }[] = [
   { value: 'text', label: 'Literal text' },
   { value: 'name', label: 'Part name' },
-  { value: 'ipn', label: 'IPN' },
+  // Displayed as FBPN to sit parallel with MPN below, to match the `fbpn` field
+  // the KiCad library server writes into a schematic, and because "IPN" means
+  // nothing to someone looking for their FireBin part number. The value stays
+  // 'ipn': saved templates persist the binding by name, and renaming it would
+  // blank this field on every label anyone has already designed.
+  { value: 'ipn', label: 'FBPN' },
   { value: 'package', label: 'Package' },
   { value: 'mpn', label: 'MPN' },
   { value: 'manufacturer', label: 'Manufacturer' },

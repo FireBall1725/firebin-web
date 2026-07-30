@@ -5,22 +5,24 @@
 // (name, MPN, IPN, description, footprint, keywords, category), locations, and
 // projects; typed text that matches a known footprint/type/bin can be pinned as a
 // facet chip, so you can lock "footprint: 0603" and then type "resistor" or "1k".
-// All client-side over the already-loaded lists — fast, and smarter than the
-// backend's name/MPN-only search.
+// Parts, locations and projects are matched client-side over the already-loaded
+// lists — fast, and smarter than the backend's name/MPN-only search. KiCad
+// symbols and footprints are the exception: there are tens of thousands of them,
+// so those are searched server-side and debounced.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type Part, type Category, type StorageLocation, type Project } from '../lib/api'
+import {
+  api,
+  type Part,
+  type Category,
+  type StorageLocation,
+  type Project,
+  type KicadLibraryItem,
+} from '../lib/api'
 import { catStyle } from '../lib/symbols'
 import { PartGraphic } from './SymbolPicker'
 import { icon } from '../lib/icons'
-import {
-  mdiMagnify,
-  mdiClose,
-  mdiArchiveOutline,
-  mdiFolderOutline,
-  mdiArrowRight,
-  mdiTagOutline,
-} from '@mdi/js'
+import { mdiArchiveOutline, mdiArrowRight, mdiClose, mdiFolderOutline, mdiMagnify, mdiTagOutline, mdiVectorSquare } from '@mdi/js'
 
 type FacetKind = 'footprint' | 'type' | 'location'
 type Facet = { kind: FacetKind; value: string }
@@ -33,6 +35,7 @@ type Item =
   | { kind: 'location'; id: string; loc: StorageLocation }
   | { kind: 'project'; id: string; project: Project }
   | { kind: 'command'; id: string; label: string; run: () => void }
+  | { kind: 'kicadlib'; id: string; item: KicadLibraryItem }
 
 const uniq = (xs: string[]) => Array.from(new Set(xs))
 
@@ -46,6 +49,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [facets, setFacets] = useState<Facet[]>([])
   const [sel, setSel] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  // KiCad libraries are searched server-side. There are tens of thousands of
+  // them, so unlike parts and locations they cannot be preloaded and filtered
+  // in the browser.
+  const [kicad, setKicad] = useState<KicadLibraryItem[]>([])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -54,6 +61,35 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     api.listLocations().then(setLocations).catch(() => undefined)
     api.listProjects().then(setProjects).catch(() => undefined)
   }, [])
+
+  // Debounced so a fast typist issues one query per pause, not one per keystroke.
+  useEffect(() => {
+    const q = text.trim()
+    if (q.length < 2) {
+      setKicad([])
+      return
+    }
+    let cancelled = false
+    const t = setTimeout(() => {
+      Promise.all([
+        api.searchKicadLibrary('symbol', q).catch(() => []),
+        api.searchKicadLibrary('footprint', q).catch(() => []),
+      ]).then(([sym, fp]) => {
+        if (cancelled) return
+        // Interleave so one kind cannot crowd the other out of the cap below.
+        const out: KicadLibraryItem[] = []
+        for (let i = 0; i < Math.max(sym.length, fp.length) && out.length < 6; i++) {
+          if (sym[i]) out.push(sym[i])
+          if (fp[i] && out.length < 6) out.push(fp[i])
+        }
+        setKicad(out)
+      })
+    }, 180)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [text])
 
   const catById = useMemo(() => {
     const m = new Map<string, string>()
@@ -121,6 +157,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         .forEach((p) => out.push({ kind: 'project', id: `proj-${p.id}`, project: p }))
     }
 
+    // KiCad symbols and footprints, from the server-side index.
+    kicad.forEach((it) =>
+      out.push({ kind: 'kicadlib', id: `kicad-${it.kind}-${it.lib}:${it.name}`, item: it }),
+    )
+
     // Commands: navigation shortcuts, shown when empty or matching.
     const commands: { label: string; run: () => void }[] = [
       { label: 'Batch scan', run: () => window.dispatchEvent(new Event('firebin:batchscan')) },
@@ -135,7 +176,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       .forEach((c, i) => out.push({ kind: 'command', id: `cmd-${i}`, label: c.label, run: c.run }))
 
     return out
-  }, [text, facets, parts, categories, locations, projects, packages])
+    // `kicad` belongs here: it lands asynchronously after the debounced search
+    // resolves, so leaving it out froze the rows at the empty first render.
+  }, [text, facets, parts, categories, locations, projects, packages, kicad])
 
   useEffect(() => { setSel(0) }, [text, facets])
 
@@ -146,6 +189,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       case 'location': navigate('/locations'); onClose(); break
       case 'project': navigate(`/projects/${item.project.id}`); onClose(); break
       case 'command': item.run(); onClose(); break
+      case 'kicadlib':
+        navigate(`/kicad?kind=${item.item.kind}&lib_id=${encodeURIComponent(`${item.item.lib}:${item.item.name}`)}`)
+        onClose()
+        break
     }
   }
 
@@ -163,6 +210,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     { kind: 'part', label: 'Parts' },
     { kind: 'location', label: 'Locations' },
     { kind: 'project', label: 'Projects' },
+    // Must sit here, not at the end: rows are numbered in the order this array
+    // is walked, and `sel` indexes the `items` array, where KiCad hits are
+    // pushed after projects and before the commands. A group out of place here
+    // highlights one row and opens another.
+    { kind: 'kicadlib', label: 'KiCad library' },
     { kind: 'command', label: 'Go to' },
   ]
   let idx = -1
@@ -276,6 +328,21 @@ function Row({ item }: { item: Item }) {
           <div className="title">{item.project.name}</div>
           {item.project.board_count > 0 && <div className="sub">{item.project.board_count} boards</div>}
         </div>
+      </>
+    )
+  }
+  if (item.kind === 'kicadlib') {
+    return (
+      <>
+        {icon(mdiVectorSquare)}
+        <div className="main">
+          {/* Library first, dimmed: the name is what was searched for, the
+              library is context. Matches how the picker lists them. */}
+          <div className="title mono" style={{ fontSize: 13 }}>
+            <span className="c-dim">{item.item.lib}:</span>{item.item.name}
+          </div>
+        </div>
+        <span className="meta">KiCad {item.item.kind}</span>
       </>
     )
   }

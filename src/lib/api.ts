@@ -42,6 +42,40 @@ export interface CreatedPAT {
   meta: APIToken
 }
 
+export interface KicadLibrarySettings {
+  enabled: boolean
+  /** What goes in a generated .kicad_httplib. Empty until an admin saves one. */
+  root_url: string
+  /** Where the KiCad routes are mounted, e.g. "/api/kicad-lib". Appended to the
+   *  browser's origin to suggest a root_url, so the path is not duplicated here. */
+  route_path: string
+}
+
+/** One KiCad workstation's credential. The secret is never returned; token_suffix
+ *  is what distinguishes rows in the list. */
+export interface KicadLibraryToken {
+  id: string
+  name: string
+  token_suffix: string
+  created_by?: string
+  last_used_at?: string
+  revoked_at?: string
+  created_at: string
+}
+
+export interface CreatedKicadLibraryToken {
+  /** Shown once and never recoverable; only its hash is stored. */
+  token: string
+  meta: KicadLibraryToken
+  route_path: string
+  /** The finished .kicad_httplib as text. Write it out byte for byte.
+   *
+   *  Deliberately a string rather than an object: parsing and re-serialising it
+   *  here would emit `"version": 1` where KiCad is given `1.0`, because
+   *  JavaScript numbers cannot represent the difference. */
+  config_file: string
+}
+
 export interface Category {
   id: string
   parent_id?: string
@@ -1073,6 +1107,29 @@ export const api = {
   },
   cleanupEmptyLots() {
     return request<{ enabled: boolean; deleted: number }>('/stock/cleanup-empty', { method: 'POST' })
+  },
+
+  // ── KiCad library server ────────────────────────────────────────────────
+  getKicadLibrarySettings() {
+    return request<KicadLibrarySettings>('/settings/kicad-library')
+  },
+  updateKicadLibrarySettings(body: { enabled?: boolean; root_url?: string }) {
+    return request<KicadLibrarySettings>('/settings/kicad-library', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+  },
+  listKicadLibraryTokens() {
+    return request<KicadLibraryToken[]>('/settings/kicad-library/tokens')
+  },
+  createKicadLibraryToken(name: string) {
+    return request<CreatedKicadLibraryToken>('/settings/kicad-library/tokens', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    })
+  },
+  revokeKicadLibraryToken(id: string) {
+    return request<{ status: string }>(`/settings/kicad-library/tokens/${id}`, { method: 'DELETE' })
   },
 
   // ── Bulk part actions ───────────────────────────────────────────────────────

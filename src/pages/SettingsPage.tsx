@@ -11,6 +11,7 @@ import { ApiTokensSettings } from '../components/ApiTokensSettings'
 import { JobsSettings } from '../components/JobsSettings'
 import { AboutSettings } from '../components/AboutSettings'
 import { UsersSettings, AccountSettings } from '../components/UsersSettings'
+import { KicadLibraryServerSettings } from '../components/KicadLibraryServerSettings'
 import { LabelBuilder } from '../components/LabelBuilder'
 import { useAuth } from '../auth/AuthContext'
 
@@ -29,6 +30,7 @@ export function SettingsPage() {
     ...(isAdmin ? [{ id: 'enrichment', label: 'Enrichment', desc: 'Digi-Key, Nexar' }] : []),
     { id: 'activity', label: 'Activity', desc: 'Background jobs' },
     { id: 'tokens', label: 'API tokens', desc: 'fbin_pat_…' },
+    ...(isAdmin ? [{ id: 'kicadserver', label: 'KiCad library server', desc: 'Serve parts to KiCad' }] : []),
     ...(isAdmin ? [{ id: 'users', label: 'Users', desc: 'Members, roles' }] : []),
     ...(isAdmin ? [{ id: 'data', label: 'Data', desc: 'Export / import' }] : []),
     { id: 'account', label: 'Account', desc: 'Your password' },
@@ -64,6 +66,7 @@ export function SettingsPage() {
           {section === 'enrichment' && <EnrichmentSection />}
           {section === 'activity' && <JobsSettings />}
           {section === 'tokens' && <ApiTokensSettings />}
+          {section === 'kicadserver' && isAdmin && <KicadLibraryServerSettings />}
           {section === 'users' && isAdmin && <UsersSettings />}
           {section === 'data' && isAdmin && <DataSection />}
           {section === 'account' && <AccountSettings />}

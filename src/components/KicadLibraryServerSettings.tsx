@@ -94,6 +94,13 @@ export function KicadLibraryServerSettings() {
     await loadTokens()
   }
 
+  // A revoked row stays so it is clear a machine was cut off on purpose, but it
+  // has to be removable or the list accumulates every workstation ever added.
+  const remove = async (id: string) => {
+    await api.deleteKicadLibraryToken(id).catch(() => undefined)
+    await loadTokens()
+  }
+
   // The filename is load-bearing: KiCad takes the library nickname from the
   // stem, so this has to be firebin.kicad_httplib for parts to appear as
   // "FireBin:…". Renaming it later orphans every symbol already placed.
@@ -256,7 +263,11 @@ export function KicadLibraryServerSettings() {
                     : ' · never used'}
                 </div>
               </div>
-              {!t.revoked_at && (
+              {t.revoked_at ? (
+                <button onClick={() => remove(t.id)} className="btn sm" title="Remove this record from the list">
+                  Remove
+                </button>
+              ) : (
                 <button onClick={() => revoke(t.id)} className="btn sm danger">Revoke</button>
               )}
             </div>

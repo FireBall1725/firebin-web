@@ -33,6 +33,13 @@ export function ApiTokensSettings() {
     await load()
   }
 
+  // Revoked rows are kept so it is visible that a credential was deliberately
+  // cut off, but without this the list only ever grows.
+  const remove = async (id: string) => {
+    await api.deleteToken(id).catch(() => undefined)
+    await load()
+  }
+
   return (
     <div className="card">
       <div className="card-h"><h2>API tokens</h2></div>
@@ -80,7 +87,11 @@ export function ApiTokensSettings() {
                   {t.last_used_at && ` · last used ${new Date(t.last_used_at).toLocaleDateString()}`}
                 </div>
               </div>
-              {!t.revoked_at && (
+              {t.revoked_at ? (
+                <button onClick={() => remove(t.id)} className="btn sm" title="Remove this record from the list">
+                  Remove
+                </button>
+              ) : (
                 <button onClick={() => revoke(t.id)} className="btn sm danger">Revoke</button>
               )}
             </div>

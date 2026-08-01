@@ -10,6 +10,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { PartsPage } from './pages/PartsPage'
 import { PartDetailPage } from './pages/PartDetailPage'
 import { KicadPage } from './pages/KicadPage'
+import { AssistantPage } from './pages/AssistantPage'
 import { LocationsPage } from './pages/LocationsPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
@@ -27,6 +28,7 @@ export function App() {
           <Route path="parts" element={<PartsPage />} />
           <Route path="parts/:id" element={<PartDetailPage />} />
           <Route path="kicad" element={<KicadPage />} />
+          <Route path="assistant" element={<AssistantPage />} />
           <Route path="locations" element={<LocationsPage />} />
           <Route path="locations/:id" element={<LocationsPage />} />
           <Route path="projects" element={<ProjectsPage />} />

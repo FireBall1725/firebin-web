@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { api, type Part } from '../lib/api'
+import { isReference } from '../lib/stockState'
 
 // PartPicker is a small search-and-select for choosing an inventory part (pin a
 // BOM line, or match a line during upload).
@@ -56,13 +57,22 @@ export function PartPicker({ onPick, placeholder = 'Search inventory…' }: { on
                   <span style={{ flexShrink: 0, fontSize: 11, color: 'var(--dim)', fontFamily: 'var(--mono)' }}>{p.package}</span>
                 )}
                 {/* Stock is what stops you matching a BOM line to a part you
-                    have none of; zero is called out rather than hidden. */}
-                <span
-                  style={{ flexShrink: 0, fontSize: 11, fontFamily: 'var(--mono)', color: p.total_stock > 0 ? 'var(--good)' : 'var(--crit)' }}
-                  title={p.primary_location ?? undefined}
-                >
-                  ×{p.total_stock}
-                </span>
+                    have none of; zero is called out rather than hidden. A
+                    reference part says so instead of showing ×0 in red, which
+                    here would read as "you are out" rather than "you never had
+                    one" — and on a picker those lead to different decisions. */}
+                {isReference(p) ? (
+                  <span style={{ flexShrink: 0, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--dim)' }}>
+                    reference
+                  </span>
+                ) : (
+                  <span
+                    style={{ flexShrink: 0, fontSize: 11, fontFamily: 'var(--mono)', color: p.total_stock > 0 ? 'var(--good)' : 'var(--crit)' }}
+                    title={p.primary_location ?? undefined}
+                  >
+                    ×{p.total_stock}
+                  </span>
+                )}
               </div>
               {detailLine(p) && (
                 <div style={{ marginTop: 2, fontSize: 11, color: 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

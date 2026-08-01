@@ -12,16 +12,47 @@ import { AppFooter } from './AppFooter'
 import { icon } from '../lib/icons'
 import { PartFormModal } from './PartForm'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { AssistantPopup } from './AssistantPopup'
+
+// useAssistantAvailable reports whether the assistant can answer anything.
+//
+// The feature ships off, so showing it in the sidebar and floating a button on
+// every page before anyone has configured it advertises something that cannot
+// work. Asked once per mount rather than per page, and failure counts as off:
+// an older server has no such endpoint, and a missing assistant is the right
+// reading of that.
+function useAssistantAvailable(): boolean {
+  const [available, setAvailable] = useState(false)
+  useEffect(() => {
+    let active = true
+    api.assistantStatus()
+      .then((s) => active && setAvailable(s.enabled))
+      .catch(() => active && setAvailable(false))
+    return () => { active = false }
+  }, [])
+  return available
+}
 import { useAuth } from '../auth/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { api, type Category } from '../lib/api'
 import { parseFirebinPartLink, resolveFirebinPart, parseFirebinLocationLink, resolveFirebinLocation, parseFirebinStockLink, resolveFirebinStock } from '../lib/deepLink'
-import { mdiBarcodeScan, mdiCameraOutline, mdiChevronDown, mdiCogOutline, mdiFolderOutline, mdiFormatListBulletedSquare, mdiFormatListChecks, mdiMagnify, mdiMapMarkerOutline, mdiMenu, mdiPlus, mdiVectorSquare, mdiViewDashboardOutline, mdiWeatherNight, mdiWhiteBalanceSunny } from '@mdi/js'
+import { mdiCommentQuestionOutline, mdiBarcodeScan, mdiCameraOutline, mdiChevronDown, mdiCogOutline, mdiFolderOutline, mdiFormatListBulletedSquare, mdiFormatListChecks, mdiMagnify, mdiMapMarkerOutline, mdiMenu, mdiPlus, mdiVectorSquare, mdiViewDashboardOutline, mdiWeatherNight, mdiWhiteBalanceSunny } from '@mdi/js'
 import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 import { useHardwareScanner, useCameraScan } from '../lib/prefs'
 import { currentMode, toggleMode } from '../lib/themes'
 
 type NavDef = { to: string; labelKey: string; end?: boolean; icon: React.ReactNode }
+
+// navFor builds the sidebar. Assistant appears only when it is switched on:
+// a nav item that leads to a page saying the feature is off is worse than no
+// nav item.
+function navFor(assistant: boolean): NavDef[] {
+  if (!assistant) return nav
+  const out = [...nav]
+  out.splice(out.length - 1, 0,
+    { to: '/assistant', labelKey: 'nav.assistant', icon: icon(mdiCommentQuestionOutline) })
+  return out
+}
 
 const nav: NavDef[] = [
   { to: '/', labelKey: 'nav.dashboard', end: true, icon: icon(mdiViewDashboardOutline) },
@@ -58,6 +89,7 @@ export function Layout() {
   const [actionLot, setActionLot] = useState<string | null>(null)
   const [moveSignal, setMoveSignal] = useState<{ locationId: string; name: string; n: number } | null>(null)
   const moveNonce = useRef(0)
+  const assistantAvailable = useAssistantAvailable()
   const [batchOpen, setBatchOpen] = useState(false)
   const batchScanFn = useRef<((code: string) => void) | null>(null)
   const [alphaHidden, setAlphaHidden] = useState(() => localStorage.getItem('firebin.alphaDismissed') === '1')
@@ -165,7 +197,7 @@ export function Layout() {
 
         <nav className="nav">
           <div className="nav-label eyebrow">Workspace</div>
-          {nav.map((item) => (
+          {navFor(assistantAvailable).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -285,6 +317,10 @@ export function Layout() {
             <Outlet />
           </div>
         </main>
+
+        {/* Mounted once here rather than on each page, so every screen has it
+            and no new page has to remember to add it. */}
+        {assistantAvailable && <AssistantPopup />}
 
         <AppFooter />
       </div>

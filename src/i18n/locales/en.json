@@ -12,6 +12,7 @@
   },
   "nav": {
     "apiTokens": "API Tokens",
+    "assistant": "Assistant",
     "dashboard": "Dashboard",
     "kicad": "KiCad",
     "locations": "Locations",

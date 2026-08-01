@@ -58,27 +58,62 @@ export async function pickDirectory(): Promise<FSDirHandle | null> {
   }
 }
 
-/** A top-level symbol declaration. Nested unit sub-symbols ("R_0_1") are
- *  indented deeper and must not become entries of their own, or the index fills
- *  with thousands of phantom parts. */
-const SYMBOL_START = /^\t\(symbol "([^"]+)"/
+/** A symbol declaration at any indentation. Which of them are top level is
+ *  decided by nesting depth, not by the whitespace in front of them. */
+const SYMBOL_LINE = /^\s*\(symbol "([^"]+)"/
 
+/** Counts parentheses on a line, ignoring any inside a quoted string.
+ *
+ *  Property values carry brackets all the time ("Cap (0603)", "R (1%)"), and
+ *  counting those would throw the depth off for the rest of the file. */
+function parenDelta(line: string): number {
+  let depth = 0
+  let inString = false
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (inString) {
+      if (c === '\\') i++
+      else if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') inString = true
+    else if (c === '(') depth++
+    else if (c === ')') depth--
+  }
+  return depth
+}
+
+/** Splits a .kicad_sym file into its top-level symbols.
+ *
+ *  Depth decides what is top level, not indentation. This used to match a tab
+ *  followed by "(symbol", which is how KiCad's own libraries are written and is
+ *  not how everyone else writes them: a library exported with two-space indents
+ *  produced zero symbols, silently, and the upload that followed replaced the
+ *  whole index with the footprints alone.
+ *
+ *  Nested unit sub-symbols ("R_0_1") sit a level deeper and must not become
+ *  entries of their own, or the index fills with thousands of phantom parts. */
 export function splitSymbols(text: string, lib: string): ScanItem[] {
   const out: ScanItem[] = []
   let name = ''
   let buf: string[] = []
+  let depth = 0
   const flush = () => {
     if (name) out.push({ kind: 'symbol', lib, name, source: buf.join('\n') })
   }
   for (const line of text.split('\n')) {
-    const m = SYMBOL_START.exec(line)
+    // A top-level symbol opens at depth 1: inside (kicad_symbol_lib, nothing
+    // else. A unit opens at depth 2.
+    const m = depth === 1 ? SYMBOL_LINE.exec(line) : null
     if (m) {
       flush()
       name = m[1]
       buf = [line]
+      depth += parenDelta(line)
       continue
     }
     if (name) buf.push(line)
+    depth += parenDelta(line)
   }
   flush()
   return out

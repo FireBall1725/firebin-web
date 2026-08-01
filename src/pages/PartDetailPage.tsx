@@ -13,8 +13,9 @@ import {
   type AdjustKind,
 } from '../lib/api'
 import { KicadDrawingView } from '../components/KicadDrawingView'
-import { PartFormModal } from '../components/PartForm'
+import { PartFormModal, partToDraft } from '../components/PartForm'
 import { PartThumb, CatChip } from '../components/PartsViews'
+import { isLow, isReference } from '../lib/stockState'
 import { ManufacturerParts } from '../components/ManufacturerParts'
 import { PrintLabelModal } from '../components/PrintLabelModal'
 import { StockLots } from '../components/StockLots'
@@ -79,7 +80,11 @@ export function PartDetailPage() {
   if (!part) return <p className="c-faint">Loading…</p>
 
   const isTemplate = part.is_template || (part.variant_count ?? 0) > 0
-  const low = part.total_stock <= 0 || (part.minimum_stock > 0 && part.total_stock <= part.minimum_stock)
+  // A part recorded but not owned is never low: there is no shortfall in
+  // something you decided not to stock. Shared with the list views so the two
+  // cannot disagree about the same part.
+  const reference = isReference(part)
+  const low = isLow(part)
 
   const del = async () => {
     if (!confirm(`Delete "${part.name}"? This removes its variants and stock.`)) return
@@ -138,7 +143,12 @@ export function PartDetailPage() {
                 {part.variant_count ?? part.variants?.length ?? 0} variants
               </span>
             )}
-            {!isTemplate && (
+            {!isTemplate && reference && (
+              <span className="pill ghost" title="Recorded for reference; you do not stock this">
+                reference only
+              </span>
+            )}
+            {!isTemplate && !reference && (
               <span className={`pill ${low ? 'low' : 'ok'}`}>
                 {num(part.total_stock)} {low ? 'low' : 'in stock'}
               </span>
@@ -149,10 +159,18 @@ export function PartDetailPage() {
         </div>
         <div className="flex items-center gap-3">
           <div style={{ textAlign: 'right' }}>
-            <div className="eyebrow">In stock</div>
-            <div className={`mono ${low ? 'c-crit' : 'c-text'}`} style={{ fontSize: 24, fontWeight: 700 }}>
-              {num(part.total_stock)}
-            </div>
+            {/* "In stock: 0" is the wrong headline for a part you never
+                stocked: it reads as sold out. */}
+            <div className="eyebrow">{reference ? 'Not stocked' : 'In stock'}</div>
+            {reference ? (
+              <div className="c-faint" style={{ fontSize: 13, maxWidth: 150, lineHeight: 1.4 }}>
+                Recorded for reference
+              </div>
+            ) : (
+              <div className={`mono ${low ? 'c-crit' : 'c-text'}`} style={{ fontSize: 24, fontWeight: 700 }}>
+                {num(part.total_stock)}
+              </div>
+            )}
           </div>
           {canWrite && <div style={{ position: 'relative' }}>
             <div style={{ display: 'flex' }}>
@@ -226,23 +244,7 @@ export function PartDetailPage() {
           categories={categories}
           title="Edit part"
           editId={part.id}
-          initial={{
-            name: part.name,
-            category: categories.find((c) => c.id === part.category_id)?.name ?? '',
-            package: part.package ?? '',
-            kicad_symbol: part.kicad_symbol ?? '',
-            kicad_footprint: part.kicad_footprint ?? '',
-            ipn: part.ipn ?? '',
-            description: part.description ?? '',
-            variant_of: part.variant_of,
-            is_template: part.is_template,
-            minimum_stock: part.minimum_stock,
-            parameters: (part.parameters ?? []).map((p) => ({
-              name: p.template_name,
-              value: p.value,
-              units: p.units ?? '',
-            })),
-          }}
+          initial={partToDraft(part, categories)}
           onClose={() => setEditing(false)}
           onCreated={() => { setEditing(false); reload() }}
         />

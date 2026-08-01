@@ -7,6 +7,7 @@
 
 import { useMemo, useState } from 'react'
 import type { Part } from '../lib/api'
+import { allReference, isLow, isReference } from '../lib/stockState'
 import { num } from '../lib/format'
 import { PartGraphic } from './SymbolPicker'
 import { catStyle } from '../lib/symbols'
@@ -72,7 +73,19 @@ export function PartThumb({ part, catName, size }: { part: Part; catName?: strin
   )
 }
 
-const isLow = (p: Part) => p.total_stock <= 0 || (p.minimum_stock > 0 && p.total_stock <= p.minimum_stock)
+
+// ReferenceTag is what a part you do not own shows instead of a stock figure.
+//
+// A bare "0" is the same thing the app shows for something you have run out of,
+// which is the one distinction this flag exists to make. The words matter more
+// than the styling: "reference" alone still invites reading the 0 next to it.
+function ReferenceTag() {
+  return (
+    <span className="pill ghost" title="Recorded for reference; you do not stock this">
+      not stocked
+    </span>
+  )
+}
 
 function LowBar({ part, width }: { part: Part; width: number }) {
   const denom = (part.minimum_stock > 0 ? part.minimum_stock : 10) * 4
@@ -166,7 +179,9 @@ function GridCard({ p, cn, onOpen, onAdjust, variant = false, sel }: {
         </div>
         <div className="foot flex items-center justify-between">
           <span className="mono c-dim truncate" style={{ fontSize: 11, maxWidth: '62%' }}>{variant ? p.primary_manufacturer : p.primary_mpn}</span>
-          <span className={`pill ${isLow(p) ? 'low' : 'ok'}`}>{num(p.total_stock)}</span>
+          {isReference(p)
+            ? <ReferenceTag />
+            : <span className={`pill ${isLow(p) ? 'low' : 'ok'}`}>{num(p.total_stock)}</span>}
         </div>
       </div>
     </button>
@@ -202,7 +217,9 @@ export function PartsGrid(props: ViewProps) {
                 <div className="meta"><span className="c-faint" style={{ fontSize: 11 }}>{g.parts.length} variants</span></div>
                 <div className="foot flex items-center justify-between">
                   <span className="c-dim" style={{ fontSize: 11 }}>{sel ? 'Select all' : 'Show variants'}</span>
-                  <span className={`pill ${g.total <= 0 ? 'low' : 'ok'}`}>{num(g.total)}</span>
+                  {allReference(g.parts)
+                    ? <ReferenceTag />
+                    : <span className={`pill ${g.total <= 0 ? 'low' : 'ok'}`}>{num(g.total)}</span>}
                 </div>
               </div>
             </button>,
@@ -217,7 +234,9 @@ export function PartsGrid(props: ViewProps) {
               </span>
               <div className="min-w-0" style={{ flex: 1 }}>
                 <div className="nm truncate" style={{ fontWeight: 600 }}>{g.name}</div>
-                <div className="c-faint" style={{ fontSize: 11.5 }}>{g.parts.length} variants · {num(g.total)} total</div>
+                <div className="c-faint" style={{ fontSize: 11.5 }}>
+                  {g.parts.length} variants · {allReference(g.parts) ? 'not stocked' : `${num(g.total)} total`}
+                </div>
               </div>
               <span className="c-dim" style={{ fontSize: 11.5 }}>{sel ? 'Select all' : 'Hide variants'}</span>
             </div>
@@ -254,9 +273,17 @@ function LcRow({ p, cn, onOpen, onAdjust, variant = false, sel }: {
         </div>
       </div>
       <div className="stk">
-        <div className={`big ${isLow(p) ? 'low' : ''}`}>{num(p.total_stock)}</div>
-        <LowBar part={p} width={110} />
-        <Stepper part={p} onAdjust={onAdjust} />
+        {isReference(p) ? (
+          // No number, no bar, no stepper: each of those is a statement about
+          // a quantity, and the point is that there is not one.
+          <ReferenceTag />
+        ) : (
+          <>
+            <div className={`big ${isLow(p) ? 'low' : ''}`}>{num(p.total_stock)}</div>
+            <LowBar part={p} width={110} />
+            <Stepper part={p} onAdjust={onAdjust} />
+          </>
+        )}
       </div>
     </div>
   )
@@ -291,8 +318,14 @@ export function PartsListCards(props: ViewProps) {
                 </div>
               </div>
               <div className="stk">
-                <div className={`big ${g.total <= 0 ? 'low' : ''}`}>{num(g.total)}</div>
-                <span className="c-faint" style={{ fontSize: 11 }}>across variants</span>
+                {allReference(g.parts)
+                  ? <ReferenceTag />
+                  : (
+                    <>
+                      <div className={`big ${g.total <= 0 ? 'low' : ''}`}>{num(g.total)}</div>
+                      <span className="c-faint" style={{ fontSize: 11 }}>across variants</span>
+                    </>
+                  )}
               </div>
             </div>
             {isOpen && g.parts.map((p) => (
@@ -329,7 +362,7 @@ function TableRow({ p, cn, onOpen, onAdjust, variant = false, sel }: {
       <td><LocTag part={p} /></td>
       <td className="num" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-          <Stepper part={p} onAdjust={onAdjust} />
+          {isReference(p) ? <ReferenceTag /> : <Stepper part={p} onAdjust={onAdjust} />}
         </div>
       </td>
     </tr>
@@ -375,7 +408,9 @@ export function PartsTable(props: ViewProps) {
                   <td className="c-faint">{g.parts.length} MPNs</td>
                   <td></td>
                   <td></td>
-                  <td className="num mono c-dim" style={{ fontSize: 12.5 }}>{num(g.total)}</td>
+                  <td className="num mono c-dim" style={{ fontSize: 12.5 }}>
+                    {allReference(g.parts) ? 'not stocked' : num(g.total)}
+                  </td>
                 </tr>,
               ]
               if (isOpen) for (const p of g.parts) rows.push(<TableRow key={p.id} p={p} cn={catName(p)} onOpen={onOpen} onAdjust={onAdjust} variant sel={sel} />)

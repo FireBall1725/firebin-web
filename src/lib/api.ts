@@ -86,6 +86,122 @@ export interface Category {
   part_count: number
 }
 
+// ── Assistant conversations ─────────────────────────────────────────────────
+export interface ConversationMessage {
+  id: string
+  seq: number
+  role: 'user' | 'assistant'
+  content: string
+  // The tool calls and their results, kept so an answer's numbers can be traced
+  // back to what was actually read.
+  tool_calls?: unknown
+  tool_results?: unknown
+  created_at: string
+}
+
+export interface Conversation {
+  id: string
+  title: string
+  subject_kind?: string
+  subject_id?: string
+  message_count: number
+  messages?: ConversationMessage[]
+  created_at: string
+  updated_at: string
+}
+
+export interface AssistantStep {
+  tool: string
+  input: string
+  output: string
+  is_error?: boolean
+}
+
+export interface AssistantTurn {
+  text: string
+  steps?: AssistantStep[]
+  usage: {
+    model_id: string
+    input_tokens: number
+    output_tokens: number
+    estimated_cost_usd: number
+    cost_known: boolean
+  }
+  rounds: number
+  hit_round_limit?: boolean
+}
+
+export interface AssistantReply {
+  conversation_id: string
+  title?: string
+  turn?: AssistantTurn
+  // Present when the turn failed. The turn is still returned when there is one,
+  // because the tools it managed are worth seeing.
+  error?: string
+}
+
+export interface AssistantUsage {
+  turns: number
+  failed_turns: number
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+  unpriced_turns: number
+}
+
+// ── AI assistant ────────────────────────────────────────────────────────────
+// The settings page renders whatever fields a provider declares, so adding a
+// provider on the server needs no change on this side.
+export interface AIConfigField {
+  key: string
+  label: string
+  type: 'password' | 'text' | 'url' | 'model'
+  required: boolean
+  placeholder?: string
+  help_text?: string
+  options?: string[]
+}
+
+export interface AIProviderStatus {
+  name: string
+  display_name: string
+  description: string
+  help_text?: string
+  help_url?: string
+  local: boolean
+  config_fields: AIConfigField[]
+  // Saved values, with any secret replaced by "***". Never send that value
+  // back: an untouched secret is sent by omitting the field entirely.
+  config: Record<string, string>
+  // enabled means it has what it needs to run. Which provider answers is the
+  // active selection, not this.
+  enabled: boolean
+  active: boolean
+  has_secret: boolean
+  can_list_models: boolean
+}
+
+export interface AISettings {
+  enabled: boolean
+  active_provider: string
+  providers: AIProviderStatus[]
+}
+
+export interface AITestResult {
+  ok: boolean
+  model: string
+  reply?: string
+  error?: string
+  tokens?: number
+  cost_usd?: string
+}
+
+// PartMatch is a part from a specification search, carrying the parameters that
+// satisfied the query so the UI can show why it came back.
+export interface PartMatch extends Part {
+  matched_parameters: PartParameter[]
+}
+
 export interface PartParameter {
   id: string
   template_id: string
@@ -253,6 +369,9 @@ export interface Part {
   is_assembly: boolean
   is_purchaseable: boolean
   is_trackable: boolean
+  /** Recorded but not owned. Distinct from total_stock 0, which only says the
+   *  count is zero and cannot say whether the part was ever on the shelf. */
+  reference_only: boolean
   minimum_stock: number
   default_location_id?: string
   created_at: string
@@ -330,6 +449,8 @@ export interface ManufacturerPart {
 
 export interface PartInput {
   name: string
+  /** Recorded but not owned. Omit on PATCH to leave it as it is. */
+  reference_only?: boolean
   category_id?: string | null
   variant_of?: string | null
   description?: string | null
@@ -611,6 +732,35 @@ async function parseError(res: Response): Promise<never> {
 // Single-flight refresh so concurrent 401s don't fire multiple refreshes.
 let refreshing: Promise<boolean> | null = null
 
+// Called once when a session is gone for good: a 401 that a refresh could not
+// rescue. Without it the tokens were cleared and nothing else happened, so the
+// app carried on rendering as though signed in and every request failed with a
+// message about that request rather than about the session. The session layer
+// knows; the router has to be told.
+let sessionExpired: (() => void) | null = null
+
+export function onSessionExpired(fn: () => void) {
+  sessionExpired = fn
+}
+
+function endSession() {
+  tokenStore.clear()
+  const notify = sessionExpired
+  // Cleared first, so a listener that re-renders and refetches cannot loop back
+  // through here.
+  sessionExpired = null
+  notify?.()
+}
+
+// resumeSession attempts to get back a usable access token from a stored
+// refresh token, for the case where only the access token is gone. Callers that
+// have neither get false and belong on the login screen.
+export async function resumeSession(): Promise<boolean> {
+  if (tokenStore.access) return true
+  if (!tokenStore.refresh) return false
+  return tryRefresh()
+}
+
 async function tryRefresh(): Promise<boolean> {
   if (refreshing) return refreshing
   const refresh = tokenStore.refresh
@@ -647,11 +797,83 @@ async function requestBlob(path: string, options: RequestInit = {}, retry = true
   const access = tokenStore.access
   if (access) headers.set('Authorization', `Bearer ${access}`)
   const res = await fetch(`${BASE}${path}`, { ...options, headers, cache: 'no-store' })
-  if (res.status === 401 && retry && tokenStore.refresh) {
-    if (await tryRefresh()) return requestBlob(path, options, false)
+  if (res.status === 401 && retry) {
+    if (tokenStore.refresh && await tryRefresh()) return requestBlob(path, options, false)
+    endSession()
   }
   if (!res.ok) return parseError(res)
   return res.blob()
+}
+
+
+// streamAssistantMessage reads a streamed answer as it is written.
+//
+// Not EventSource: that can only issue a GET, which would put the question in
+// the query string where it lands in access logs and browser history. A POST
+// whose body is read as a stream keeps the question in the body and still
+// arrives a fragment at a time.
+//
+// onEvent is called for every frame. The caller decides what to render; this
+// only parses the wire format.
+export async function streamAssistantMessage(
+  body: {
+    question: string
+    conversation_id?: string
+    subject_kind?: string
+    subject_id?: string
+    context?: string
+  },
+  onEvent: (event: string, data: Record<string, unknown>) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  const access = tokenStore.access
+  if (access) headers.set('Authorization', `Bearer ${access}`)
+
+  const res = await fetch(`${BASE}/assistant/messages/stream`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    cache: 'no-store',
+    signal,
+  })
+  // Everything refusable is refused before the stream opens, so a non-2xx here
+  // still has a JSON body worth reading.
+  if (res.status === 401) endSession()
+  if (!res.ok) return parseError(res)
+  if (!res.body) throw new ApiError(500, 'the server sent no stream')
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    // Frames are separated by a blank line. A partial frame stays in the
+    // buffer until the rest of it arrives, which is the whole reason this is
+    // not a naive split on newline.
+    let sep = buffer.indexOf('\n\n')
+    while (sep !== -1) {
+      const frame = buffer.slice(0, sep)
+      buffer = buffer.slice(sep + 2)
+      let event = 'message'
+      const dataLines: string[] = []
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+      }
+      if (dataLines.length > 0) {
+        try {
+          onEvent(event, JSON.parse(dataLines.join('\n')))
+        } catch {
+          // A frame that will not parse is skipped rather than killing the
+          // stream: the rest of the answer is still worth having.
+        }
+      }
+      sep = buffer.indexOf('\n\n')
+    }
+  }
 }
 
 async function request<T>(
@@ -670,10 +892,13 @@ async function request<T>(
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers, cache: 'no-store' })
 
-  if (res.status === 401 && retry && tokenStore.refresh) {
-    if (await tryRefresh()) {
+  if (res.status === 401 && retry) {
+    if (tokenStore.refresh && await tryRefresh()) {
       return request<T>(path, options, false)
     }
+    // The refresh is gone or was rejected, so this is not a failed request, it
+    // is the end of the session.
+    endSession()
   }
   if (!res.ok) return parseError(res)
   if (res.status === 204) return undefined as T
@@ -695,6 +920,11 @@ export interface KicadLibrarySummary {
   lib: string
   count: number
   with_source: number
+  /** When this library last arrived, and from where. Null means the import
+   *  predates imports being recorded. A full KiCad install is 438 libraries,
+   *  so this is how the one you just added is findable. */
+  imported_at: string | null
+  source: string
 }
 
 export interface KicadIndexStatus {
@@ -916,6 +1146,27 @@ export const api = {
     q.set('top_level', String(opts.topLevel ?? true))
     return request<Part[]>(`/parts?${q.toString()}`)
   },
+  // searchParts asks by specification instead of by name: package and parameter
+  // value, with unit-aware matching on the server. Kept separate from listParts
+  // because it returns a different shape and joins part_parameters, which the
+  // catalogue listing has no use for.
+  searchParts(opts: {
+    search?: string
+    category?: string
+    package?: string
+    parameter?: string
+    value?: string
+    limit?: number
+  }) {
+    const q = new URLSearchParams()
+    if (opts.search) q.set('search', opts.search)
+    if (opts.category) q.set('category', opts.category)
+    if (opts.package) q.set('package', opts.package)
+    if (opts.parameter) q.set('parameter', opts.parameter)
+    if (opts.value) q.set('value', opts.value)
+    if (opts.limit) q.set('limit', String(opts.limit))
+    return request<PartMatch[]>(`/parts/search?${q.toString()}`)
+  },
   getPart(id: string) {
     return request<Part>(`/parts/${id}`)
   },
@@ -929,6 +1180,57 @@ export const api = {
     return request<{ status: string }>(`/parts/${id}`, { method: 'DELETE' })
   },
 
+
+  // ── Assistant ─────────────────────────────────────────────────────────────
+  // Whether the assistant is switched on and has a usable provider. Readable by
+  // any signed-in user, unlike the settings it reflects.
+  assistantStatus() {
+    return request<{ enabled: boolean; ready: boolean }>('/assistant/status')
+  },
+  listConversations() {
+    return request<Conversation[]>('/assistant/conversations')
+  },
+  getConversation(id: string) {
+    return request<Conversation>(`/assistant/conversations/${id}`)
+  },
+  deleteConversation(id: string) {
+    return request<{ status: string }>(`/assistant/conversations/${id}`, { method: 'DELETE' })
+  },
+  // Omit conversation_id to start a new thread. subject_* and context describe
+  // the page a popup was opened from.
+  sendAssistantMessage(body: {
+    question: string
+    conversation_id?: string
+    subject_kind?: string
+    subject_id?: string
+    context?: string
+  }) {
+    return request<AssistantReply>('/assistant/messages', { method: 'POST', body: JSON.stringify(body) })
+  },
+  assistantUsage() {
+    return request<AssistantUsage>('/assistant/usage')
+  },
+
+  // ── AI assistant ──────────────────────────────────────────────────────────
+  getAISettings() {
+    return request<AISettings>('/settings/ai')
+  },
+  // Every field is optional and an omitted one is left alone, so a section can
+  // be saved without the caller having to restate the rest.
+  updateAISettings(body: {
+    enabled?: boolean
+    active_provider?: string
+    provider?: string
+    config?: Record<string, string>
+  }) {
+    return request<AISettings>('/settings/ai', { method: 'PUT', body: JSON.stringify(body) })
+  },
+  testAIProvider(name: string) {
+    return request<AITestResult>(`/settings/ai/${encodeURIComponent(name)}/test`, { method: 'POST' })
+  },
+  listAIModels(name: string) {
+    return request<{ models: string[]; error?: string }>(`/settings/ai/${encodeURIComponent(name)}/models`)
+  },
 
   // ── KiCad libraries ─────────────────────────────────────────────────────────
   kicadIndexStatus() {
@@ -947,11 +1249,33 @@ export const api = {
       `/kicad/libraries/search?kind=${kind}&q=${encodeURIComponent(q)}`,
     )
   },
-  uploadKicadBatch(scanID: string, items: { kind: string; lib: string; name: string; source?: string }[]) {
-    return request<{ stored: number }>('/kicad/libraries/batch', {
+  uploadKicadBatch(
+    scanID: string,
+    items: { kind: string; lib: string; name: string; source?: string }[],
+    overwrite = false,
+  ) {
+    return request<{ stored: number; skipped: number }>('/kicad/libraries/batch', {
       method: 'POST',
-      body: JSON.stringify({ scan_id: scanID, items }),
+      body: JSON.stringify({ scan_id: scanID, items, overwrite }),
     })
+  },
+  renameKicadLibrary(kind: 'symbol' | 'footprint', lib: string, name: string) {
+    return request<{ moved: number }>('/kicad/libraries/rename', {
+      method: 'POST',
+      body: JSON.stringify({ kind, lib, name }),
+    })
+  },
+  deleteKicadLibrary(kind: 'symbol' | 'footprint', lib: string) {
+    return request<{ deleted: number }>(
+      `/kicad/libraries?kind=${kind}&lib=${encodeURIComponent(lib)}`,
+      { method: 'DELETE' },
+    )
+  },
+  deleteKicadLibraryItem(kind: 'symbol' | 'footprint', lib: string, name: string) {
+    return request<{ deleted: number }>(
+      `/kicad/libraries?kind=${kind}&lib=${encodeURIComponent(lib)}&name=${encodeURIComponent(name)}`,
+      { method: 'DELETE' },
+    )
   },
   finishKicadScan(scanID: string, source: string, kicadVersion?: string) {
     return request<KicadIndexStatus['meta']>('/kicad/libraries/finish', {

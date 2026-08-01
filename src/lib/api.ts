@@ -1031,6 +1031,12 @@ export const api = {
   revokeToken(id: string) {
     return request<{ status: string }>(`/tokens/${id}`, { method: 'DELETE' })
   },
+  /** Removes an already-revoked token's record. Revoking is what stops the
+   *  credential working; this only tidies the list afterwards, and the API
+   *  refuses it on a token that is still live. */
+  deleteToken(id: string) {
+    return request<{ status: string }>(`/tokens/${id}?purge=true`, { method: 'DELETE' })
+  },
 
   // ── Categories ──────────────────────────────────────────────────────────────
   listCategories() {
@@ -1454,6 +1460,12 @@ export const api = {
   },
   revokeKicadLibraryToken(id: string) {
     return request<{ status: string }>(`/settings/kicad-library/tokens/${id}`, { method: 'DELETE' })
+  },
+  /** Removes an already-revoked workstation's record. Refused while it is live. */
+  deleteKicadLibraryToken(id: string) {
+    return request<{ status: string }>(`/settings/kicad-library/tokens/${id}?purge=true`, {
+      method: 'DELETE',
+    })
   },
 
   // ── Bulk part actions ───────────────────────────────────────────────────────

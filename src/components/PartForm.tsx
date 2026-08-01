@@ -9,6 +9,8 @@ import {
   type Category,
   type EnrichedPart,
   type ParameterInput,
+  type Part,
+  type PartParameter,
   type PriceBreak,
   type StorageLocation,
 } from '../lib/api'
@@ -33,6 +35,40 @@ export interface DraftSupplier {
   pricing: PriceBreak[]
 }
 
+// partToDraft builds an edit draft from a stored part.
+//
+// Every edit call site used to hand-pick fields into an object literal, and a
+// field left out of that list did not merely fail to show: the form initialises
+// its state from the draft and sends that state back on save, so an omission
+// silently wrote the field's zero value over what was stored. reference_only
+// was missed, so opening a part you do not own and saving anything at all
+// turned it back into a part you do own.
+//
+// Deriving the draft from the Part is the fix. Adding a field to the form now
+// means adding it here, in one place the compiler points at, rather than
+// remembering every screen that opens the form.
+export function partToDraft(part: Part, categories: Category[]): PartDraft {
+  return {
+    name: part.name,
+    category: categories.find((c) => c.id === part.category_id)?.name ?? '',
+    package: part.package ?? '',
+    kicad_symbol: part.kicad_symbol ?? '',
+    kicad_footprint: part.kicad_footprint ?? '',
+    ipn: part.ipn ?? '',
+    description: part.description ?? '',
+    image_path: part.image_path ?? '',
+    variant_of: part.variant_of,
+    is_template: part.is_template,
+    reference_only: part.reference_only,
+    minimum_stock: part.minimum_stock,
+    parameters: (part.parameters ?? []).map((q: PartParameter) => ({
+      name: q.template_name,
+      value: q.value,
+      units: q.units ?? '',
+    })),
+  }
+}
+
 // PartDraft pre-fills the form. A blank draft is a plain manual add; a scan
 // fills the same shape so the create screen is identical either way.
 export interface PartDraft {
@@ -46,6 +82,7 @@ export interface PartDraft {
   image_path?: string
   variant_of?: string
   is_template?: boolean
+  reference_only?: boolean
   minimum_stock?: number
   parameters?: ParameterInput[]
   // Commercial: an MPN turns into a manufacturer part (+ supplier SKUs) on save.
@@ -93,6 +130,7 @@ export function PartForm({
   const [picking, setPicking] = useState<'symbol' | 'footprint' | null>(null)
   const [suggesting, setSuggesting] = useState(false)
   const [ipn, setIpn] = useState(initial?.ipn ?? '')
+  const [referenceOnly, setReferenceOnly] = useState(initial?.reference_only ?? false)
   const [description, setDescription] = useState(initial?.description ?? '')
   const [minimum, setMinimum] = useState(String(initial?.minimum_stock ?? 0))
   const [params, setParams] = useState<ParameterInput[]>(initial?.parameters ?? [])
@@ -211,7 +249,11 @@ export function PartForm({
           kicad_footprint: kicadFootprint.trim() || null,
           description: description || null,
           image_path: imagePath,
-          is_template: false,
+          reference_only: referenceOnly,
+          // is_template is deliberately not sent. This form has no control for
+          // it, and hardcoding false here demoted a template every time one was
+          // edited. PATCH now leaves out what it is not told about, so omitting
+          // the field preserves whatever the part already is.
           minimum_stock: parseFloat(minimum) || 0,
           parameters: params.filter((p) => p.name.trim() && p.value.trim()),
         })
@@ -231,6 +273,7 @@ export function PartForm({
         description: description || null,
         image_path: imageFile ? null : imagePath,
         is_template: false,
+        reference_only: referenceOnly,
         minimum_stock: parseFloat(minimum) || 0,
         parameters: params.filter((p) => p.name.trim() && p.value.trim()),
       })
@@ -530,7 +573,22 @@ export function PartForm({
           </datalist>
         </div>
 
-        {!editing && (
+        {/* Sits with the stock fields because it is the same decision: whether
+            this is something you have, or something you have only written down.
+            Leaving the quantity blank used to be the only way to say the latter,
+            and nothing could tell it apart from having run out. */}
+        <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={referenceOnly}
+            onChange={(e) => setReferenceOnly(e.target.checked)}
+          />
+          <span className="c-text" style={{ fontSize: 13.5 }}>
+            I don't own this yet, save it for reference
+          </span>
+        </label>
+
+        {!editing && !referenceOnly && (
           <div>
             <span className="eyebrow">Initial stock</span>
             <div className="grid grid-cols-2 gap-4" style={{ marginTop: 6 }}>

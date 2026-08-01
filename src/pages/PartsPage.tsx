@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Part, type Category, type StorageLocation } from '../lib/api'
+import { isLow } from '../lib/stockState'
 import { PartFormModal } from '../components/PartForm'
 import { PrintLabelModal } from '../components/PrintLabelModal'
 import { BulkActionsModal, type BulkAction } from '../components/BulkActionsModal'
@@ -13,7 +14,7 @@ import { PartsTable, PartsGrid, PartsListCards, groupByName } from '../component
 import { Pager } from '../components/Pager'
 import { comparePartNames } from '../lib/partSort'
 import { icon } from '../lib/icons'
-import { mdiPlus, mdiClose, mdiMagnify } from '@mdi/js'
+import { mdiPlus, mdiClose, mdiMagnify, mdiTune } from '@mdi/js'
 import { useAuth } from '../auth/AuthContext'
 
 export function PartsPage() {
@@ -27,6 +28,9 @@ export function PartsPage() {
   const [category, setCategory] = useState<string | undefined>(undefined)
   const [search, setSearch] = useState('')
   const [lowOnly, setLowOnly] = useState(false)
+  const [specOpen, setSpecOpen] = useState(false)
+  const [pkg, setPkg] = useState('')
+  const [value, setValue] = useState('')
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
   const [page, setPage] = useState(1)
@@ -39,14 +43,27 @@ export function PartsPage() {
   const [bulkMsg, setBulkMsg] = useState<string | null>(null)
   const [printOpen, setPrintOpen] = useState(false)
 
+  // Two different questions, two different endpoints. Spec search joins
+  // part_parameters and compares units on the server, which the catalogue
+  // listing neither does nor needs. It also returns variants rather than only
+  // top-level parts, because a variant is usually the thing that carries the
+  // spec being asked for.
   const load = useCallback(() => {
     setLoading(true)
-    api
-      .listParts({ search: search || undefined, category, topLevel: true })
+    const bySpec = pkg.trim() !== '' || value.trim() !== ''
+    const req = bySpec
+      ? api.searchParts({
+          search: search || undefined,
+          category,
+          package: pkg.trim() || undefined,
+          value: value.trim() || undefined,
+        })
+      : api.listParts({ search: search || undefined, category, topLevel: true })
+    req
       .then(setParts)
       .catch(() => setParts([]))
       .finally(() => setLoading(false))
-  }, [search, category])
+  }, [search, category, pkg, value])
 
   useEffect(() => {
     api.listCategories().then(setCategories).catch(() => setCategories([]))
@@ -82,7 +99,6 @@ export function PartsPage() {
       .catch(load)
   }, [load])
 
-  const isLow = (p: Part) => p.total_stock <= 0 || (p.minimum_stock > 0 && p.total_stock <= p.minimum_stock)
   const shown = useMemo(() => (lowOnly ? parts.filter(isLow) : parts), [parts, lowOnly])
 
   // Group by name, then paginate whole groups (so a group never splits a page).
@@ -93,7 +109,7 @@ export function PartsPage() {
   const totalPages = Math.max(1, Math.ceil(groups.length / pageSize))
   const pageNo = Math.min(page, totalPages)
   useEffect(() => { if (page !== pageNo) setPage(pageNo) }, [page, pageNo])
-  useEffect(() => { setPage(1) }, [search, category, lowOnly, pageSize])
+  useEffect(() => { setPage(1) }, [search, category, lowOnly, pageSize, pkg, value])
 
   const pageGroups = groups.slice((pageNo - 1) * pageSize, pageNo * pageSize)
   const pageParts = useMemo(() => pageGroups.flatMap((g) => g.parts), [pageGroups])
@@ -287,11 +303,52 @@ export function PartsPage() {
               {icon(mdiMagnify)}
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search parts, keywords, MPN…" />
             </div>
+            <button
+              className={`chipbtn ${specOpen || pkg || value ? 'on' : ''}`}
+              onClick={() => {
+                // Closing the panel clears its filters, so a hidden package or
+                // value can never keep filtering the list from out of view.
+                if (specOpen) { setPkg(''); setValue('') }
+                setSpecOpen((v) => !v)
+              }}
+            >
+              {icon(mdiTune)}
+              By spec
+            </button>
             <button className={`chipbtn crit ${lowOnly ? 'on' : ''}`} onClick={() => setLowOnly((v) => !v)}>
               <span className="pv-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--crit)', display: 'inline-block' }} />
               Low stock
             </button>
           </div>
+
+          {specOpen && (
+            <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="c-faint" style={{ fontSize: 13, minWidth: 56 }}>Package</label>
+                <input
+                  className="input"
+                  style={{ flex: '1 1 140px', minWidth: 120 }}
+                  value={pkg}
+                  onChange={(e) => setPkg(e.target.value)}
+                  placeholder="0603"
+                />
+                <label className="c-faint" style={{ fontSize: 13, minWidth: 40 }}>Value</label>
+                <input
+                  className="input"
+                  style={{ flex: '1 1 160px', minWidth: 140 }}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder="220 ohm, 4.7uF, X7R…"
+                />
+              </div>
+              <p className="c-faint" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+                Package matches on part of the name, so 0603 finds 0603 (1608 Metric).
+                A value with a unit compares as a real quantity, so 220 ohm never
+                matches 220 pF and 100 ohm never matches 100 kΩ. A bare number
+                matches the value printed on the part, whatever its unit.
+              </p>
+            </div>
+          )}
 
           {loading ? (
             <div className="card"><p className="c-faint" style={{ textAlign: 'center', padding: 40 }}>Loading…</p></div>

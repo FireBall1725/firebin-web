@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { api, tokenStore, type User } from '../lib/api'
+import { api, onSessionExpired, resumeSession, tokenStore, type User } from '../lib/api'
 
 interface AuthState {
   user: User | null
@@ -35,17 +35,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // On mount, if we hold a token, resolve the current user (this also exercises
   // the refresh path if the access token has expired). With no token, check
   // whether the instance still needs its first account so we can show the wizard.
+  // A session that dies mid-use has to take the user back to the login screen.
+  // Clearing the user is enough: ProtectedRoute redirects on it.
+  useEffect(() => {
+    onSessionExpired(() => setUser(null))
+  }, [])
+
   useEffect(() => {
     let active = true
+    // An expired access token with a live refresh token is a session worth
+    // resuming, not a signed-out user. Without this the app showed the login
+    // screen while holding a perfectly good refresh token.
+    void (async () => {
+      if (!tokenStore.access && tokenStore.refresh) await resumeSession()
+      if (!active) return
+      bootstrap()
+    })()
+
+    function bootstrap() {
     if (!tokenStore.access) {
       api
         .getSetupStatus()
         .then((s) => active && setSetupRequired(s.setup_required))
         .catch(() => undefined)
         .finally(() => active && setLoading(false))
-      return () => {
-        active = false
-      }
+      return
     }
     api
       .me()
@@ -55,6 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (active) setUser(null)
       })
       .finally(() => active && setLoading(false))
+    }
+
     return () => {
       active = false
     }

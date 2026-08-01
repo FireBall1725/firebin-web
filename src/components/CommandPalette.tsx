@@ -21,6 +21,7 @@ import {
 } from '../lib/api'
 import { catStyle } from '../lib/symbols'
 import { PartGraphic } from './SymbolPicker'
+import { stockLabel } from '../lib/stockState'
 import { icon } from '../lib/icons'
 import { mdiArchiveOutline, mdiArrowRight, mdiClose, mdiFolderOutline, mdiMagnify, mdiTagOutline, mdiVectorSquare } from '@mdi/js'
 
@@ -307,7 +308,7 @@ function Row({ item }: { item: Item }) {
             {[item.catName, item.part.package, item.part.primary_mpn].filter(Boolean).join(' · ') || '—'}
           </div>
         </div>
-        <span className="meta">{item.part.total_stock > 0 ? `${item.part.total_stock} in stock` : 'no stock'}</span>
+        <span className="meta">{stockLabel(item.part)}</span>
       </>
     )
   }

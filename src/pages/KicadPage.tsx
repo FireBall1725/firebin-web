@@ -32,12 +32,16 @@ export function KicadPage() {
   const [kind, setKind] = useState<Kind>('symbol')
   const [libs, setLibs] = useState<KicadLibrarySummary[]>([])
   const [libFilter, setLibFilter] = useState('')
+  const [libSort, setLibSort] = useState<'name' | 'recent'>('name')
   const [lib, setLib] = useState<string | null>(null)
   const [items, setItems] = useState<KicadLibraryItem[]>([])
   const [itemFilter, setItemFilter] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [usage, setUsage] = useState<KicadUsage[]>([])
   const [loadingItems, setLoadingItems] = useState(false)
+  const [renameTo, setRenameTo] = useState('')
+  const [libBusy, setLibBusy] = useState(false)
+  const [libError, setLibError] = useState<string | null>(null)
   const itemsRef = useRef<HTMLDivElement>(null)
   const [params, setParams] = useSearchParams()
 
@@ -89,10 +93,80 @@ export function KicadPage() {
     api.kicadUsage(kind, selected).then(setUsage).catch(() => setUsage([]))
   }, [kind, selected])
 
+  // The rename box shows the current name, so the common edit is fixing part of
+  // it rather than retyping a name nobody wants to type twice.
+  useEffect(() => { setRenameTo(lib ?? ''); setLibError(null) }, [lib])
+
+  const doRename = async () => {
+    if (!lib || renameTo.trim() === '' || renameTo === lib) return
+    setLibBusy(true)
+    setLibError(null)
+    try {
+      const to = renameTo.trim()
+      const res = await api.renameKicadLibrary(kind, lib, to)
+      // Merging into a name that already exists is allowed, and an item whose
+      // name is taken there stays put. Saying so beats a silent shortfall.
+      const left = items.length - res.moved
+      if (left > 0) setLibError(`${res.moved} moved; ${left} left behind, already in "${to}".`)
+      setLib(left > 0 ? lib : to)
+      setReloadKey((k) => k + 1)
+    } catch (e) {
+      setLibError(e instanceof Error ? e.message : 'Rename failed.')
+    } finally {
+      setLibBusy(false)
+    }
+  }
+
+  const doDeleteLibrary = async () => {
+    if (!lib) return
+    if (!confirm(`Delete "${lib}" and all ${items.length} of its ${kind}s from the index?\n\nThis only removes FireBin's copy. Your KiCad install is untouched, and re-importing brings it back.`)) return
+    setLibBusy(true)
+    setLibError(null)
+    try {
+      await api.deleteKicadLibrary(kind, lib)
+      setLib(null)
+      setItems([])
+      setSelected(null)
+      setReloadKey((k) => k + 1)
+    } catch (e) {
+      setLibError(e instanceof Error ? e.message : 'Delete failed.')
+    } finally {
+      setLibBusy(false)
+    }
+  }
+
+  const doDeleteItem = async () => {
+    if (!lib || !selected) return
+    const name = selected.slice(selected.indexOf(':') + 1)
+    if (!confirm(`Delete ${selected} from the index?\n\nOnly FireBin's copy. Your KiCad install is untouched.`)) return
+    try {
+      await api.deleteKicadLibraryItem(kind, lib, name)
+      setItems((cur) => cur.filter((i) => `${i.lib}:${i.name}` !== selected))
+      setSelected(null)
+      setReloadKey((k) => k + 1)
+    } catch (e) {
+      setLibError(e instanceof Error ? e.message : 'Delete failed.')
+    }
+  }
+
   const shownLibs = useMemo(() => {
     const q = libFilter.trim().toLowerCase()
-    return q ? libs.filter((l) => l.lib.toLowerCase().includes(q)) : libs
-  }, [libs, libFilter])
+    const list = q ? libs.filter((l) => l.lib.toLowerCase().includes(q)) : libs
+    // A full KiCad install is 438 libraries. Alphabetical is right for browsing
+    // them, and useless for finding the one folder you imported an hour ago,
+    // which is the reason anybody opens this page after an import.
+    //
+    // An import with no recorded time sorts first rather than last. It is one
+    // of the handful added by hand before this was tracked, so it is far more
+    // likely to be what someone is looking for than any of the stock 438.
+    if (libSort !== 'recent') return list
+    return [...list].sort((a, b) => {
+      if (!a.imported_at && !b.imported_at) return a.lib.localeCompare(b.lib)
+      if (!a.imported_at) return -1
+      if (!b.imported_at) return 1
+      return b.imported_at.localeCompare(a.imported_at) || a.lib.localeCompare(b.lib)
+    })
+  }, [libs, libFilter, libSort])
 
   // Libraries run to thousands of items, so filtering happens here rather than
   // rendering every row and letting the browser struggle.
@@ -190,7 +264,9 @@ export function KicadPage() {
 
       {isAdmin && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-          <button className="btn sm" onClick={() => setScanning(true)}>Re-import…</button>
+          {/* "Import", not "Re-import": importing adds to the index and removes
+              nothing, so it is not a replacement of what is already there. */}
+          <button className="btn sm" onClick={() => setScanning(true)}>Import…</button>
         </div>
       )}
 
@@ -220,6 +296,18 @@ export function KicadPage() {
               onChange={(e) => setLibFilter(e.target.value)}
               placeholder={`Filter ${libs.length} libraries`}
             />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, fontSize: 11.5 }}>
+              {([['name', 'A–Z'], ['recent', 'Just imported']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`btn sm ${libSort === key ? '' : 'ghost'}`}
+                  style={{ flex: 1, padding: '3px 6px', fontSize: 11.5 }}
+                  onClick={() => setLibSort(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div style={{ maxHeight: 520, overflowY: 'auto' }}>
             {shownLibs.map((l) => (
@@ -240,11 +328,56 @@ export function KicadPage() {
                   color: l.lib === lib ? 'var(--text)' : 'var(--text-dim)',
                 }}
               >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.lib}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {l.lib}
+                  {/* Only under the recency sort. Alphabetical is for browsing,
+                      and a date on all 438 rows is noise there. */}
+                  {libSort === 'recent' && (
+                    <span className="c-dim" style={{ display: 'block', fontSize: 10.5, marginTop: 1 }}>
+                      {l.imported_at
+                        ? `${new Date(l.imported_at).toLocaleDateString()} · ${l.source}`
+                        : 'import time not recorded'}
+                    </span>
+                  )}
+                </span>
                 <span className="c-dim mono" style={{ fontSize: 11.5 }}>{l.count}</span>
               </button>
             ))}
           </div>
+          {/* Renaming and deleting change what every workstation resolves
+              against, so they sit behind the admin check the API also enforces. */}
+          {isAdmin && lib && (
+            <div style={{ padding: 10, borderTop: '1px solid var(--border)', display: 'grid', gap: 7 }}>
+              <input
+                className="input mono"
+                style={{ fontSize: 12.5 }}
+                value={renameTo}
+                onChange={(e) => setRenameTo(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void doRename() }}
+                aria-label="Library name"
+              />
+              <div style={{ display: 'flex', gap: 7 }}>
+                <button
+                  className="btn sm"
+                  style={{ flex: 1 }}
+                  disabled={libBusy || renameTo.trim() === '' || renameTo === lib}
+                  onClick={() => void doRename()}
+                >
+                  Rename
+                </button>
+                <button
+                  className="btn sm danger"
+                  disabled={libBusy}
+                  onClick={() => void doDeleteLibrary()}
+                >
+                  Delete
+                </button>
+              </div>
+              {libError && (
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--crit, #c66)' }}>{libError}</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Items in the selected library */}
@@ -298,8 +431,13 @@ export function KicadPage() {
         {/* Preview + usage */}
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '11px 14px', borderBottom: '1px solid var(--border)' }}>
-            <div className="mono" style={{ fontSize: 13, wordBreak: 'break-all' }}>
-              {selected || <span className="c-dim">Select an item to preview it</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="mono" style={{ fontSize: 13, wordBreak: 'break-all', flex: 1 }}>
+                {selected || <span className="c-dim">Select an item to preview it</span>}
+              </div>
+              {isAdmin && selected && (
+                <button className="btn sm ghost" onClick={() => void doDeleteItem()}>Delete</button>
+              )}
             </div>
           </div>
           <KicadDrawingView kind={kind} libID={selected} height={360} />

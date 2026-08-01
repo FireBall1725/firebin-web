@@ -10,6 +10,7 @@ const WEB_LIBS: [string, string][] = [
   ['zxing-wasm', 'MIT'],
   ['qrcode-generator', 'MIT'],
   ['lz-string', 'MIT'],
+  ['Prism (prismjs)', 'MIT'],
   ['Vite', 'MIT'],
   ['Tailwind CSS', 'MIT'],
   ['TypeScript', 'Apache-2.0'],

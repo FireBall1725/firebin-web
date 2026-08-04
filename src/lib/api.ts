@@ -497,13 +497,40 @@ export interface StockItem {
   updated_at: string
 }
 
+/** One day of the movement sparkline. Days with no movement are present with a
+ *  zero, so a quiet stretch reads as a flat run rather than closing up. */
+export interface DayCount {
+  day: string
+  count: number
+}
+
+/** How close one board is to buildable, for one of each.
+ *
+ *  Two numbers because they fail differently: `short` is matched parts the shelf
+ *  cannot cover, `unmatched` is lines that resolve to no part at all. A board
+ *  with nothing short and six unmatched is not ready, and only the second number
+ *  says so. */
+export interface BoardFill {
+  board_id: string
+  project_id: string
+  name: string
+  lines: number
+  short: number
+  unmatched: number
+}
+
 export interface Stats {
   parts_count: number
   variants_count: number
   locations_count: number
   low_stock_count: number
   total_units: number
-  inventory_value: number
+  not_stocked_count: number
+  unmatched_bom_lines: number
+  parts_without_symbol: number
+  moves_30d: number
+  movement: DayCount[]
+  boards: BoardFill[]
 }
 
 export interface StockTransaction {

@@ -10,7 +10,12 @@ import { subscribeEvents } from './api'
 // the shared SSE connection.
 export function useRealtime(resources: string[], onChange: () => void) {
   const cb = useRef(onChange)
-  cb.current = onChange
+  // Updated in an effect rather than during render: writing a ref while
+  // rendering is not safe under concurrent rendering, and the callback is only
+  // ever read later from the SSE subscription, never during a render pass.
+  useEffect(() => {
+    cb.current = onChange
+  }, [onChange])
   const key = resources.join(',')
 
   useEffect(() => {

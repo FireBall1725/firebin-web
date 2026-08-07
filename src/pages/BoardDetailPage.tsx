@@ -442,7 +442,8 @@ function AssembleTab({ boardID, board, onGoToBom }: { boardID: string; board: Bo
 
   const toggle = (k: string) => setPicked((prev) => {
     const n = new Set(prev)
-    n.has(k) ? n.delete(k) : n.add(k)
+    if (n.has(k)) n.delete(k)
+    else n.add(k)
     try { localStorage.setItem(pickedKey(boardID), JSON.stringify([...n])) } catch { /* ignore */ }
     return n
   })

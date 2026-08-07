@@ -86,7 +86,10 @@ export function IBomViewer({
   const setPlacedRefs = useCallback((refs: string[], on: boolean) => {
     setPlaced((prev) => {
       const next = new Set(prev)
-      for (const r of refs) (on ? next.add(r) : next.delete(r))
+      for (const r of refs) {
+        if (on) next.add(r)
+        else next.delete(r)
+      }
       persistPlaced(next)
       return next
     })
@@ -207,7 +210,8 @@ export function IBomViewer({
   const toggleExpand = (id: string) =>
     setExpanded((prev) => {
       const n = new Set(prev)
-      n.has(id) ? n.delete(id) : n.add(id)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
       return n
     })
 

@@ -161,7 +161,11 @@ export function ScanModal({ onClose, initialCode, mode = 'camera', onResolvedPar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result])
 
-  const handleCode = async (raw: string) => {
+  // Function declaration, not a const arrow: the camera loop above and the
+  // initial-code effect both call this before this line is reached. A hoisted
+  // declaration has no temporal dead zone, and the binding is never
+  // reassigned, so there is no stale-closure hazard either.
+  async function handleCode(raw: string) {
     // FireBin's own label QR: jump straight to the part instead of the
     // distributor-barcode lookup.
     const link = parseFirebinPartLink(raw)
@@ -549,7 +553,7 @@ function MatchView({
   // scan burst, so the hook leaves it alone.
   useBarcodeScanner(async (code) => {
     const link = parseFirebinLocationLink(code)
-    let loc: StorageLocation | null = null
+    let loc: StorageLocation | null
     try {
       loc = link != null ? await resolveFirebinLocation(link) : await api.scanLocation(code)
     } catch {

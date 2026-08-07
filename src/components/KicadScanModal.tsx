@@ -21,6 +21,40 @@ function mb(n: number) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
+/** A copyable command line. Defined at module scope rather than inside
+ *  KicadScanModal: a component created during render is a new type on every
+ *  render, so React remounts it and it loses any state it holds. It took
+ *  `copied` and `copy` from the closure before; they're props now. */
+function Cmd({
+  id,
+  text,
+  copied,
+  onCopy,
+}: {
+  id: string
+  text: string
+  copied: string | null
+  onCopy: (id: string, text: string) => void
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+      <code
+        className="mono"
+        style={{
+          flex: 1, padding: '8px 10px', fontSize: 12, lineHeight: 1.5,
+          background: 'var(--bg-sunk, rgba(0,0,0,0.22))', borderRadius: 6,
+          border: '1px solid var(--border)', overflowX: 'auto', whiteSpace: 'pre',
+        }}
+      >
+        {text}
+      </code>
+      <button className="btn sm" style={{ flexShrink: 0 }} onClick={() => onCopy(id, text)}>
+        {copied === id ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  )
+}
+
 /** Import KiCad libraries without installing anything, as an alternative to the
  *  kicad-index CLI. Same endpoints, same result.
  *
@@ -320,23 +354,6 @@ function CliInstructions({ isMac }: { isMac: boolean }) {
     })
   }
 
-  const Cmd = ({ id, text }: { id: string; text: string }) => (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-      <code
-        className="mono"
-        style={{
-          flex: 1, padding: '8px 10px', fontSize: 12, lineHeight: 1.5,
-          background: 'var(--bg-sunk, rgba(0,0,0,0.22))', borderRadius: 6,
-          border: '1px solid var(--border)', overflowX: 'auto', whiteSpace: 'pre',
-        }}
-      >
-        {text}
-      </code>
-      <button className="btn sm" style={{ flexShrink: 0 }} onClick={() => copy(id, text)}>
-        {copied === id ? 'Copied' : 'Copy'}
-      </button>
-    </div>
-  )
 
   return (
     <div className="modal-b" style={{ display: 'grid', gap: 14, fontSize: 13.5 }}>
@@ -366,7 +383,7 @@ function CliInstructions({ isMac }: { isMac: boolean }) {
           >
             Download from GitHub releases
           </a>
-          <Cmd id="install" text="go install github.com/FireBall1725/firebin-kicad/cmd/kicad-index@latest" />
+          <Cmd id="install" text="go install github.com/FireBall1725/firebin-kicad/cmd/kicad-index@latest" copied={copied} onCopy={copy} />
         </div>
       </div>
 
@@ -384,7 +401,7 @@ function CliInstructions({ isMac }: { isMac: boolean }) {
 
       <div>
         <div className="eyebrow" style={{ marginBottom: 6 }}>3 · Run it</div>
-        <Cmd id="run" text={run} />
+        <Cmd id="run" text={run} copied={copied} onCopy={copy} />
         <ul className="c-dim" style={{ margin: '10px 0 0', paddingLeft: 18, lineHeight: 1.7, fontSize: 12.5 }}>
           <li>
             It finds KiCad's shared-support and config folders on its own.{' '}

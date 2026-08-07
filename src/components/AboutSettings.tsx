@@ -14,7 +14,7 @@ const WEB_LIBS: [string, string][] = [
   ['Vite', 'MIT'],
   ['Tailwind CSS', 'MIT'],
   ['TypeScript', 'Apache-2.0'],
-  ['oxlint', 'MIT'],
+  ['ESLint', 'MIT'],
 ]
 
 const API_LIBS: [string, string][] = [

@@ -29,8 +29,12 @@ Run what CI runs:
 ```sh
 npm ci
 npm run build     # tsc -b type-checks, then vite build. A type error fails here.
-npm run lint      # oxlint
+npm run lint      # eslint, same config as librarium-web
 ```
+
+Lint errors fail CI; warnings do not. `react-hooks/set-state-in-effect` and
+`react-refresh/only-export-components` are deliberately warnings because the
+existing tree trips them broadly, and clearing them is its own piece of work.
 
 Keep commits small and focused, and write a message that says what changed and why. Do not add `Co-Authored-By` or "Generated with" trailers; the commit is authored by the person who sent it.
 

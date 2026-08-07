@@ -218,7 +218,16 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     { kind: 'kicadlib', label: 'KiCad library' },
     { kind: 'command', label: 'Go to' },
   ]
-  let idx = -1
+  // Built here rather than inside the JSX. Walking the groups and bumping a
+  // running index inside the render output made every handler defined in that
+  // map look like render-time work to react-hooks/refs, which activate() trips
+  // by focusing inputRef. Same shape, computed before the return.
+  let running = -1
+  const sections = order.flatMap(({ kind, label }) => {
+    const group = items.filter((it) => it.kind === kind)
+    if (!group.length) return []
+    return [{ kind, label, rows: group.map((item) => ({ item, index: (running += 1) })) }]
+  })
 
   return (
     <div
@@ -248,30 +257,28 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           {items.length === 0 ? (
             <div className="cmdk-empty">No matches. Try a part name, MPN, footprint, or bin.</div>
           ) : (
-            order.map(({ kind, label }) => {
-              const group = items.filter((it) => it.kind === kind)
-              if (!group.length) return null
-              return (
-                <div key={kind}>
-                  <div className="cmdk-sec">{label}</div>
-                  {group.map((it) => {
-                    idx += 1
-                    const on = idx === sel
-                    const myIdx = idx
-                    return (
-                      <div
-                        key={it.id}
-                        className={`cmdk-row ${on ? 'on' : ''}`}
-                        onMouseMove={() => setSel(myIdx)}
-                        onClick={() => activate(it)}
-                      >
-                        <Row item={it} />
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })
+            sections.map(({ kind, label, rows }) => (
+              <div key={kind}>
+                <div className="cmdk-sec">{label}</div>
+                {rows.map(({ item, index }) => (
+                  <div
+                    key={item.id}
+                    className={`cmdk-row ${index === sel ? 'on' : ''}`}
+                    onMouseMove={() => setSel(index)}
+                    // activate -> addFacet focuses inputRef. The rule follows
+                    // that chain from a reference made in render and can't see
+                    // that the handler only ever runs on a click, never during
+                    // the render that created it. The alternative is routing
+                    // the focus through a counter and an effect, which is more
+                    // machinery than the false positive is worth.
+                    // eslint-disable-next-line react-hooks/refs
+                    onClick={() => activate(item)}
+                  >
+                    <Row item={item} />
+                  </div>
+                ))}
+              </div>
+            ))
           )}
         </div>
 

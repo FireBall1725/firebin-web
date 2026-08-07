@@ -22,10 +22,15 @@ const ESC = '\x1b'
 //      the ESC sequence arrives as literal characters).
 //   2. Ctrl combos — GS = Ctrl+], RS = Ctrl+^. Handled at capture.
 function normalizeSeparators(s: string): string {
+  // The control characters are the point. A wedge scanner emits GS and RS as
+  // VT function keys, so the ESC byte here is data we have to match, not a
+  // stray escape that slipped into a pattern.
+  /* eslint-disable no-control-regex */
   return s
     .replace(/\x1b\[19~/g, GS) // F8
     .replace(/\x1b\[18~/g, GS) // F7
     .replace(/\x1b\[20~/g, RS) // F9
+  /* eslint-enable no-control-regex */
 }
 
 interface Opts {
@@ -40,7 +45,12 @@ interface Opts {
 export function useBarcodeScanner(onScan: (code: string) => void, opts: Opts = {}) {
   const { enabled = true, maxGapMs = 50, minLength = 4 } = opts
   const onScanRef = useRef(onScan)
-  onScanRef.current = onScan
+  // Updated in an effect rather than during render: writing a ref while
+  // rendering is not safe under concurrent rendering, and this is only read
+  // from the keydown handler, well after the render that set it.
+  useEffect(() => {
+    onScanRef.current = onScan
+  }, [onScan])
 
   useEffect(() => {
     if (!enabled) return

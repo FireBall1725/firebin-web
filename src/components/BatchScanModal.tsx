@@ -104,7 +104,7 @@ export function BatchScanModal({ registerScan, onClose }: {
       return
     }
     const partCode = parseFirebinPartLink(code)
-    let partId: string | null = null
+    let partId: string | null
     let intakeQty = 0 // >0 = an intake/distributor bag barcode that states a quantity
     if (partCode) {
       partId = await resolveFirebinPart(partCode)
@@ -138,7 +138,12 @@ export function BatchScanModal({ registerScan, onClose }: {
 
   // Keep this modal registered as the scan sink while it's mounted.
   const addRef = useRef(add)
-  addRef.current = add
+  // Updated in an effect rather than during render: writing a ref while
+  // rendering is not safe under concurrent rendering, and the sink below only
+  // reads it when a scan actually arrives.
+  useEffect(() => {
+    addRef.current = add
+  }, [add])
   useEffect(() => {
     registerScan((code) => addRef.current(code))
     return () => registerScan(null)

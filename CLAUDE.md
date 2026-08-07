@@ -30,6 +30,7 @@ Run what CI runs:
 npm ci
 npm run build     # tsc -b type-checks, then vite build. A type error fails here.
 npm run lint      # eslint, same config as librarium-web
+npm run test      # vitest, jsdom + testing-library
 ```
 
 Lint errors fail CI; warnings do not. `react-hooks/set-state-in-effect` and

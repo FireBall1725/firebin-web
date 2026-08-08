@@ -1,0 +1,33 @@
+# Drives the Discord post in #releases.
+
+project:
+  name: FireBin Web
+  emoji: "🔥"
+  footer: "FireBin · self-hosted electronics parts inventory"
+
+channels:
+  stable:
+    announce: true
+    colour: "0x2ECC71"
+    prefix: ""
+  rc:
+    announce: true
+    colour: "0xF1C40F"
+    prefix: "Release candidate — "
+  nightly:
+    announce: false
+
+getting_started: |
+  ```
+  docker pull {{image}}
+  ```
+  The web client talks to `firebin-api` over `/api/v1`; both usually move
+  together.
+
+links:
+  - name: Site
+    url: https://firebin.fireball1725.ca/
+  - name: Source
+    url: https://github.com/{{repo}}
+  - name: Changes
+    url: "{{compare_url}}"

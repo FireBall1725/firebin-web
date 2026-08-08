@@ -1,25 +1,20 @@
 name: CI
 
+# The jobs live in FireBall1725/workflows so every React client runs the same
+# ones. Change them there, not here.
+
 on:
   push:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci
-      - name: Typecheck
-        run: npx tsc -b
-      - name: Lint
-        run: npm run lint
-      - name: Test
-        run: npm run test
-      - name: Build
-        run: npm run build
+  ci:
+    uses: FireBall1725/workflows/.github/workflows/ci-node.yml@v1
+    with:
+      # Matches the Dockerfile's node:22-alpine.
+      node-version: "22"

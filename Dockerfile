@@ -1,11 +1,18 @@
 # syntax=docker/dockerfile:1
-FROM node:22-alpine AS builder
+
+# Pinned to the BUILD platform. The output of this stage is static assets, which
+# are architecture-independent, so there is no reason to run npm under QEMU for
+# the arm64 leg.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ARG FIREBIN_VERSION=""
-ENV FIREBIN_VERSION=$FIREBIN_VERSION
+# VERSION is what the shared release workflow passes, in every repo. vite reads
+# it under the app's own name, so the arg is standard and the env var stays
+# what the code expects.
+ARG VERSION=""
+ENV FIREBIN_VERSION=$VERSION
 RUN npm run build
 
 FROM nginx:alpine

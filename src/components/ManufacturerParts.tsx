@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type Datasheet, type ManufacturerPart, type Supplier, type PriceBreak } from '../lib/api'
 import { useAuth } from '../auth/AuthContext'
-import { DatasheetViewer } from './DatasheetViewer'
+import { useNavigate } from 'react-router-dom'
 import { icon } from '../lib/icons'
 import { mdiDownload, mdiFilePdfBox, mdiUpload } from '@mdi/js'
 
@@ -20,6 +20,7 @@ export function ManufacturerParts({
   onChanged: () => void
 }) {
   const { canWrite } = useAuth()
+  const navigate = useNavigate()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [addMpn, setAddMpn] = useState(false)
   const [extended, setExtended] = useState(false) // show unit price vs. quantity × unit
@@ -33,7 +34,6 @@ export function ManufacturerParts({
   // exists. Fetched once for the part rather than per MPN: a family PDF is
   // linked to the part, and several MPNs commonly share it.
   const [sheets, setSheets] = useState<Datasheet[]>([])
-  const [viewing, setViewing] = useState<Datasheet | null>(null)
 
   const loadSheets = () => {
     api
@@ -111,14 +111,12 @@ export function ManufacturerParts({
               qty={qtyNum}
               canWrite={canWrite}
               sheet={sheetFor(sheets, mp)}
-              onView={setViewing}
+              onView={(d) => navigate(`/datasheets/${d.id}`)}
               onSheetsChanged={loadSheets}
             />
           ))}
         </div>
       </div>
-
-      {viewing && <DatasheetViewer datasheet={viewing} onClose={() => setViewing(null)} />}
     </section>
   )
 }

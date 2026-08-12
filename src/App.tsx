@@ -9,6 +9,7 @@ import { SetupPage } from './pages/SetupPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { PartsPage } from './pages/PartsPage'
 import { DatasheetsPage } from './pages/DatasheetsPage'
+import { DatasheetPage } from './pages/DatasheetPage'
 import { PartDetailPage } from './pages/PartDetailPage'
 import { KicadPage } from './pages/KicadPage'
 import { AssistantPage } from './pages/AssistantPage'
@@ -29,6 +30,7 @@ export function App() {
           <Route path="parts" element={<PartsPage />} />
           <Route path="parts/:id" element={<PartDetailPage />} />
           <Route path="datasheets" element={<DatasheetsPage />} />
+          <Route path="datasheets/:id" element={<DatasheetPage />} />
           <Route path="kicad" element={<KicadPage />} />
           <Route path="assistant" element={<AssistantPage />} />
           <Route path="locations" element={<LocationsPage />} />

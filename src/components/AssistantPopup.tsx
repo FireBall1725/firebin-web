@@ -124,6 +124,8 @@ export function AssistantPopup() {
 function subjectFor(path: string): { kind: string; id: string } | null {
   const part = /^\/parts\/([0-9a-f-]{36})/i.exec(path)
   if (part) return { kind: 'part', id: part[1] }
+  const datasheet = /^\/datasheets\/([0-9a-f-]{36})/i.exec(path)
+  if (datasheet) return { kind: 'datasheet', id: datasheet[1] }
   const board = /^\/projects\/[0-9a-f-]{36}\/boards\/([0-9a-f-]{36})/i.exec(path)
   if (board) return { kind: 'board', id: board[1] }
   const project = /^\/projects\/([0-9a-f-]{36})/i.exec(path)

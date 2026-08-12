@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useEffect, useState } from 'react'
-import { api, type ManufacturerPart, type Supplier, type PriceBreak } from '../lib/api'
+import { useEffect, useRef, useState } from 'react'
+import { api, type Datasheet, type ManufacturerPart, type Supplier, type PriceBreak } from '../lib/api'
 import { useAuth } from '../auth/AuthContext'
+import { DatasheetViewer } from './DatasheetViewer'
+import { icon } from '../lib/icons'
+import { mdiDownload, mdiFilePdfBox, mdiUpload } from '@mdi/js'
 
 // ManufacturerParts renders and edits a part's commercial tree: MPNs (brand +
 // datasheet) → supplier SKUs → price breaks.
@@ -26,9 +29,24 @@ export function ManufacturerParts({
   const [mpn, setMpn] = useState('')
   const [datasheet, setDatasheet] = useState('')
 
+  // Stored datasheets for this part, so each MPN row knows whether a local copy
+  // exists. Fetched once for the part rather than per MPN: a family PDF is
+  // linked to the part, and several MPNs commonly share it.
+  const [sheets, setSheets] = useState<Datasheet[]>([])
+  const [viewing, setViewing] = useState<Datasheet | null>(null)
+
+  const loadSheets = () => {
+    api
+      .listDatasheets({ part: partID })
+      .then(setSheets)
+      .catch(() => setSheets([]))
+  }
+
   useEffect(() => {
     api.listSuppliers().then(setSuppliers).catch(() => setSuppliers([]))
   }, [])
+
+  useEffect(loadSheets, [partID])
 
   const createMpn = async () => {
     if (!mpn.trim()) return
@@ -84,11 +102,37 @@ export function ManufacturerParts({
 
         <div className="space-y-3">
           {items.map((mp) => (
-            <MpnCard key={mp.id} mp={mp} suppliers={suppliers} onChanged={onChanged} extended={extended} qty={qtyNum} canWrite={canWrite} />
+            <MpnCard
+              key={mp.id}
+              mp={mp}
+              suppliers={suppliers}
+              onChanged={onChanged}
+              extended={extended}
+              qty={qtyNum}
+              canWrite={canWrite}
+              sheet={sheetFor(sheets, mp)}
+              onView={setViewing}
+              onSheetsChanged={loadSheets}
+            />
           ))}
         </div>
       </div>
+
+      {viewing && <DatasheetViewer datasheet={viewing} onClose={() => setViewing(null)} />}
     </section>
+  )
+}
+
+// sheetFor picks the stored datasheet to offer on an MPN row.
+//
+// Prefers one linked to this exact MPN, then falls back to any datasheet on the
+// part. The fallback is the common case, not a compromise: one PDF covers a
+// whole family, so every MPN of the ESP32-C6 series should offer the series
+// datasheet rather than only the one row that happened to trigger the download.
+function sheetFor(sheets: Datasheet[], mp: ManufacturerPart): Datasheet | undefined {
+  return (
+    sheets.find((d) => d.parts.some((p) => p.manufacturer_part_id === mp.id)) ??
+    sheets[0]
   )
 }
 
@@ -100,7 +144,105 @@ function priceAt(breaks: PriceBreak[], q: number): PriceBreak | null {
   return at ?? [...breaks].sort((a, b) => a.quantity - b.quantity)[0]
 }
 
-function MpnCard({ mp, suppliers, onChanged, extended, qty, canWrite }: { mp: ManufacturerPart; suppliers: Supplier[]; onChanged: () => void; extended: boolean; qty: number; canWrite: boolean }) {
+// DatasheetControl is the three-state button beside an MPN's datasheet link.
+//
+// Which of the three appears IS the feature:
+//   a stored copy      → Read here    (opens the in-app viewer)
+//   only a vendor URL  → Save a copy  (mirrors it, then polls the task)
+//   neither            → Upload a PDF
+//
+// "Read here" stays available to viewers; the two that write do not.
+function DatasheetControl({
+  mp,
+  sheet,
+  canWrite,
+  onView,
+  onChanged,
+}: {
+  mp: ManufacturerPart
+  sheet: Datasheet | undefined
+  canWrite: boolean
+  onView: (d: Datasheet) => void
+  onChanged: () => void
+}) {
+  const [busy, setBusy] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  if (sheet) {
+    return (
+      <button className="ds-btn on" onClick={() => onView(sheet)} title={`${sheet.filename} — read it here`}>
+        {icon(mdiFilePdfBox, { size: 14 })}
+        Read here
+      </button>
+    )
+  }
+  if (!canWrite) return null
+
+  // Mirroring is a background job: enqueue, then poll until the task finishes.
+  // Same shape as the bulk refresh on the parts page.
+  const save = async () => {
+    setBusy('Saving…')
+    try {
+      const { task_id } = await api.mirrorDatasheet(mp.id)
+      for (let i = 0; i < 120; i++) {
+        await new Promise((r) => setTimeout(r, 600))
+        const t = await api.getTask(task_id)
+        if (t.status === 'completed') {
+          setBusy('')
+          onChanged()
+          return
+        }
+        if (t.status === 'failed' || t.status === 'cancelled') {
+          setBusy('Could not save it')
+          return
+        }
+      }
+      setBusy('Still running — check Activity')
+    } catch {
+      setBusy('Could not save it')
+    }
+  }
+
+  const upload = async (f: File) => {
+    setBusy('Uploading…')
+    try {
+      await api.uploadDatasheet(f, { partID: mp.part_id, manufacturerPartID: mp.id })
+      setBusy('')
+      onChanged()
+    } catch (e) {
+      setBusy(e instanceof Error ? e.message : 'Upload failed')
+    }
+  }
+
+  return (
+    <>
+      {mp.datasheet_url ? (
+        <button className="ds-btn" onClick={save} disabled={!!busy} title="Download a copy so it survives the link going dead">
+          {icon(mdiDownload, { size: 14 })}
+          {busy || 'Save a copy'}
+        </button>
+      ) : (
+        <button className="ds-btn" onClick={() => fileRef.current?.click()} disabled={!!busy} title="Upload a PDF for this MPN">
+          {icon(mdiUpload, { size: 14 })}
+          {busy || 'Upload a PDF'}
+        </button>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          e.target.value = '' // let the same file be picked again after a failure
+          if (f) void upload(f)
+        }}
+      />
+    </>
+  )
+}
+
+function MpnCard({ mp, suppliers, onChanged, extended, qty, canWrite, sheet, onView, onSheetsChanged }: { mp: ManufacturerPart; suppliers: Supplier[]; onChanged: () => void; extended: boolean; qty: number; canWrite: boolean; sheet: Datasheet | undefined; onView: (d: Datasheet) => void; onSheetsChanged: () => void }) {
   const [addSku, setAddSku] = useState(false)
   const [editing, setEditing] = useState(false)
   const [mfg, setMfg] = useState(mp.manufacturer_name ?? '')
@@ -135,9 +277,16 @@ function MpnCard({ mp, suppliers, onChanged, extended, qty, canWrite }: { mp: Ma
             <span className="c-dim" style={{ marginLeft: 8, fontSize: 12 }}>{mp.manufacturer_name || 'Generic'}</span>
             {mp.datasheet_url ? (
               <a href={mp.datasheet_url} target="_blank" rel="noreferrer" className="link" style={{ marginLeft: 8, fontSize: 12 }}>datasheet ↗</a>
-            ) : canWrite ? (
+            ) : canWrite && !sheet ? (
               <button onClick={() => setEditing(true)} className="link" style={{ marginLeft: 8, fontSize: 12 }}>+ datasheet</button>
             ) : null}
+            <DatasheetControl
+              mp={mp}
+              sheet={sheet}
+              canWrite={canWrite}
+              onView={onView}
+              onChanged={onSheetsChanged}
+            />
           </div>
           {canWrite && (
             <div className="flex items-center gap-3">

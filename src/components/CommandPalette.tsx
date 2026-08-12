@@ -18,12 +18,14 @@ import {
   type StorageLocation,
   type Project,
   type KicadLibraryItem,
+  type Datasheet,
 } from '../lib/api'
 import { catStyle } from '../lib/symbols'
 import { PartGraphic } from './SymbolPicker'
+import { DatasheetViewer } from './DatasheetViewer'
 import { stockLabel } from '../lib/stockState'
 import { icon } from '../lib/icons'
-import { mdiArchiveOutline, mdiArrowRight, mdiClose, mdiFolderOutline, mdiMagnify, mdiTagOutline, mdiVectorSquare } from '@mdi/js'
+import { mdiArchiveOutline, mdiArrowRight, mdiClose, mdiFilePdfBox, mdiFolderOutline, mdiMagnify, mdiTagOutline, mdiVectorSquare } from '@mdi/js'
 
 type FacetKind = 'footprint' | 'type' | 'location'
 type Facet = { kind: FacetKind; value: string }
@@ -54,6 +56,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   // them, so unlike parts and locations they cannot be preloaded and filtered
   // in the browser.
   const [kicad, setKicad] = useState<KicadLibraryItem[]>([])
+  // The part whose datasheet is open. Set by the PDF badge on a part row; the
+  // viewer sits above the palette rather than replacing it, so closing the PDF
+  // returns you to your search instead of losing it.
+  const [datasheetPart, setDatasheetPart] = useState<string | null>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -274,7 +280,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                     // eslint-disable-next-line react-hooks/refs
                     onClick={() => activate(item)}
                   >
-                    <Row item={item} />
+                    <Row item={item} onDatasheet={setDatasheetPart} />
                   </div>
                 ))}
               </div>
@@ -288,11 +294,45 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           <span><b>esc</b> close</span>
         </div>
       </div>
+
+      {datasheetPart && (
+        <PartDatasheetViewer partID={datasheetPart} onClose={() => setDatasheetPart(null)} />
+      )}
     </div>
   )
 }
 
-function Row({ item }: { item: Item }) {
+// PartDatasheetViewer opens the datasheet linked to a part.
+//
+// The palette row only knows that a part HAS one (the has_datasheet flag from
+// the list query), not which, so the document is resolved on click. That keeps
+// the parts list one query instead of joining every datasheet into it.
+function PartDatasheetViewer({ partID, onClose }: { partID: string; onClose: () => void }) {
+  const [sheet, setSheet] = useState<Datasheet | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listDatasheets({ part: partID })
+      .then((list) => {
+        if (cancelled) return
+        if (list.length === 0) onClose()
+        else setSheet(list[0])
+      })
+      .catch(() => !cancelled && onClose())
+    return () => {
+      cancelled = true
+    }
+  }, [partID, onClose])
+
+  if (!sheet) return null
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <DatasheetViewer datasheet={sheet} onClose={onClose} />
+    </div>
+  )
+}
+
+function Row({ item, onDatasheet }: { item: Item; onDatasheet: (partID: string) => void }) {
   if (item.kind === 'facet') {
     return (
       <>
@@ -315,7 +355,24 @@ function Row({ item }: { item: Item }) {
             {[item.catName, item.part.package, item.part.primary_mpn].filter(Boolean).join(' · ') || '—'}
           </div>
         </div>
-        <span className="meta">{stockLabel(item.part)}</span>
+        <span className="meta">
+          {item.part.has_datasheet && (
+            // stopPropagation so the badge reads the datasheet instead of
+            // navigating to the part, which is what the row itself does.
+            <button
+              className="cmdk-pdf"
+              title="Read the datasheet"
+              aria-label={`Read the datasheet for ${item.part.name}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDatasheet(item.part.id)
+              }}
+            >
+              {icon(mdiFilePdfBox, { size: 14 })}
+            </button>
+          )}
+          {stockLabel(item.part)}
+        </span>
       </>
     )
   }

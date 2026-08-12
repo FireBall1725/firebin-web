@@ -386,6 +386,60 @@ export interface Part {
   primary_manufacturer?: string
   primary_location?: string
   primary_location_id?: string
+  /** True when a stored PDF is linked to this part. Set by the list endpoints
+   *  only, so the palette can show a PDF badge without a per-row fetch. */
+  has_datasheet?: boolean
+}
+
+export interface DatasheetPartLink {
+  part_id: string
+  part_name: string
+  manufacturer_part_id?: string
+  mpn?: string
+  category_id?: string
+  category_name?: string
+}
+
+/** text_status is what the assistant can do with the document.
+ *  'no_text_layer' means it is a scan (mechanical drawings usually are), which
+ *  is a normal outcome rather than a failure. */
+export type DatasheetTextStatus = 'pending' | 'ok' | 'no_text_layer' | 'failed'
+
+export interface Datasheet {
+  id: string
+  sha256: string
+  filename: string
+  title?: string
+  mime: string
+  size_bytes: number
+  page_count?: number
+  source_url?: string
+  origin: 'upload' | 'mirror'
+  language?: string
+  text_status: DatasheetTextStatus
+  extracted_at?: string
+  created_at: string
+  updated_at: string
+  /** Empty for a document not linked to a part yet, which is allowed. */
+  parts: DatasheetPartLink[]
+}
+
+export interface DatasheetStats {
+  count: number
+  total_bytes: number
+  unlinked: number
+  mirror_candidates: number
+}
+
+export interface DatasheetSettings {
+  auto_mirror: boolean
+  extract_text: boolean
+  max_bytes: number
+  storage_path: string
+  count: number
+  total_bytes: number
+  unlinked: number
+  mirror_candidates: number
 }
 
 export interface PartAlternative {
@@ -1166,6 +1220,68 @@ export const api = {
   },
   deleteAsset(id: string) {
     return request<{ status: string }>(`/assets/${id}`, { method: 'DELETE' })
+  },
+
+  // ── Datasheets ──────────────────────────────────────────────────────────────
+  listDatasheets(opts: { search?: string; category?: string; part?: string; unlinked?: boolean } = {}) {
+    const q = new URLSearchParams()
+    if (opts.search) q.set('search', opts.search)
+    if (opts.category) q.set('category', opts.category)
+    if (opts.part) q.set('part', opts.part)
+    if (opts.unlinked) q.set('unlinked', 'true')
+    const qs = q.toString()
+    return request<Datasheet[]>(`/datasheets${qs ? `?${qs}` : ''}`)
+  },
+  datasheetStats() {
+    return request<DatasheetStats>('/datasheets/stats')
+  },
+  getDatasheet(id: string) {
+    return request<Datasheet>(`/datasheets/${id}`)
+  },
+  /** The PDF itself. Fetched as an authenticated blob rather than pointed at
+   *  with a bare src, because the content route requires a token. */
+  datasheetBlob(id: string) {
+    return requestBlob(`/datasheets/${id}/content`)
+  },
+  uploadDatasheet(file: File, opts: { partID?: string; manufacturerPartID?: string; title?: string } = {}) {
+    const form = new FormData()
+    form.append('file', file)
+    if (opts.partID) form.append('part_id', opts.partID)
+    if (opts.manufacturerPartID) form.append('manufacturer_part_id', opts.manufacturerPartID)
+    if (opts.title) form.append('title', opts.title)
+    return request<Datasheet>('/datasheets', { method: 'POST', body: form })
+  },
+  updateDatasheet(id: string, body: { title?: string | null }) {
+    return request<Datasheet>(`/datasheets/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+  },
+  deleteDatasheet(id: string) {
+    return request<void>(`/datasheets/${id}`, { method: 'DELETE' })
+  },
+  linkDatasheetPart(id: string, partID: string, manufacturerPartID?: string) {
+    return request<Datasheet>(`/datasheets/${id}/parts`, {
+      method: 'POST',
+      body: JSON.stringify({ part_id: partID, manufacturer_part_id: manufacturerPartID ?? null }),
+    })
+  },
+  unlinkDatasheetPart(id: string, partID: string) {
+    return request<void>(`/datasheets/${id}/parts/${partID}`, { method: 'DELETE' })
+  },
+  /** Save a local copy of one MPN's datasheet. Returns a task to poll. */
+  mirrorDatasheet(manufacturerPartID: string) {
+    return request<{ task_id: string }>(`/manufacturer-parts/${manufacturerPartID}/datasheet/mirror`, {
+      method: 'POST',
+    })
+  },
+  /** Backfill every part that has a datasheet URL and no stored copy.
+   *  task_id is null when there was nothing to do. */
+  bulkMirrorDatasheets() {
+    return request<{ task_id: string | null; targets: number }>('/datasheets/bulk/mirror', { method: 'POST' })
+  },
+  getDatasheetSettings() {
+    return request<DatasheetSettings>('/settings/datasheets')
+  },
+  updateDatasheetSettings(body: { auto_mirror?: boolean; extract_text?: boolean; max_bytes?: number }) {
+    return request<DatasheetSettings>('/settings/datasheets', { method: 'PUT', body: JSON.stringify(body) })
   },
 
   // ── Parts ───────────────────────────────────────────────────────────────────

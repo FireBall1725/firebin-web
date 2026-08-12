@@ -173,6 +173,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const commands: { label: string; run: () => void }[] = [
       { label: 'Batch scan', run: () => window.dispatchEvent(new Event('firebin:batchscan')) },
       { label: 'Go to Parts', run: () => navigate('/parts') },
+      { label: 'Go to Datasheets', run: () => navigate('/datasheets') },
       { label: 'Go to Locations', run: () => navigate('/locations') },
       { label: 'Go to Projects', run: () => navigate('/projects') },
       { label: 'Go to Dashboard', run: () => navigate('/') },

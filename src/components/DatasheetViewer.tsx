@@ -113,7 +113,18 @@ export function DatasheetViewer({ datasheet, onClose }: { datasheet: Datasheet; 
           {error ? (
             <div className="empty">{error}</div>
           ) : url ? (
-            <iframe className="ds-v-frame" src={url} title={title} />
+            // <object type="application/pdf">, not <iframe>. An iframe pointed at
+            // a blob: URL loads an empty document instead of engaging Chrome's
+            // PDF plugin, which renders a blank grey panel with no error. object
+            // asks for the plugin by MIME type, and its children are real
+            // fallback content when a browser has no PDF viewer at all.
+            <object className="ds-v-frame" type="application/pdf" data={url} title={title}>
+              <div className="empty">
+                This browser will not display PDFs inline.{' '}
+                <a className="link" href={url} download={datasheet.filename}>Download {datasheet.filename}</a>{' '}
+                or <a className="link" href={url} target="_blank" rel="noreferrer">open it in a new tab</a>.
+              </div>
+            </object>
           ) : (
             <div className="empty">Loading the datasheet…</div>
           )}

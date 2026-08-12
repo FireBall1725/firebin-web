@@ -493,6 +493,67 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .ds-btn:disabled { opacity: 0.6; cursor: default; }
 .ds-btn.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
 
+/* ── Library page ── */
+.ds-rail-sep { height: 1px; background: var(--border); margin: 6px 0; }
+.ds-rail-lbl { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); padding: 8px 14px 4px; }
+
+/* The table scrolls inside its own container so the page body never scrolls
+   sideways on a narrow window. */
+.ds-tblwrap { overflow-x: auto; }
+/* table-layout: fixed, deliberately. With auto layout a long filename widens its
+   cell instead of ellipsising, which pushed the whole table past its container
+   and clipped the row actions off the card. Fixed layout means the declared
+   widths win and the text truncates, so the Link-to-part button is always
+   reachable. Every column but Document is a fixed size; Document takes what is
+   left. Below min-width the wrapper scrolls rather than clipping. */
+.ds-table { width: 100%; border-collapse: collapse; min-width: 620px; table-layout: fixed; }
+.ds-table col.ds-c-linked { width: 140px; }
+.ds-table col.ds-c-size { width: 74px; }
+.ds-table col.ds-c-source { width: 112px; }
+.ds-table col.ds-c-ai { width: 94px; }
+/* Wide enough for the Link-to-part button AND the delete icon beside it; at
+   108px the button's own label was being clipped. */
+.ds-table col.ds-c-act { width: 142px; }
+.ds-table td { overflow: hidden; }
+.ds-table thead th { text-align: left; font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); font-weight: 500; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ds-table tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; }
+.ds-table tbody tr:last-child { border-bottom: none; }
+.ds-table tbody tr:hover { background: var(--accent-soft); }
+.ds-table td { padding: 11px 12px; font-size: 13px; vertical-align: middle; }
+.ds-num { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--dim); text-align: right; white-space: nowrap; }
+
+/* An unlinked row is tinted rather than hidden in a second list: it is a
+   staging state, not a mistake. */
+.ds-table tbody tr.ds-unlinked { background: var(--panel-2); }
+.ds-table tbody tr.ds-unlinked:hover { background: var(--accent-soft); }
+.ds-loose-note { font-size: 11.5px; color: var(--faint); font-style: italic; }
+
+.ds-fcell { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.ds-fico { width: 32px; height: 38px; border-radius: 5px; border: 1px solid var(--border-strong); background: var(--panel-2); display: grid; place-items: center; position: relative; flex: none; color: var(--crit); }
+.ds-fico.loose { border-style: dashed; }
+.ds-pgs { position: absolute; bottom: -1px; right: -1px; font-family: var(--mono); font-size: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 3px; padding: 0 2px; color: var(--faint); }
+.ds-ftitle { display: block; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-fname { display: block; font-size: 11px; color: var(--faint); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ds-chips { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.ds-chips .pchip { cursor: pointer; }
+.ds-chips .pchip:hover { border-color: var(--accent); color: var(--text); }
+
+/* Row actions stay hidden until the row is hovered or focused, except the
+   Link-to-part button on an unlinked row, which is the whole point of that row
+   being tinted and must not need discovering. */
+.ds-rowacts { display: flex; gap: 3px; justify-content: flex-end; opacity: 0; transition: opacity 0.12s; }
+.ds-table tbody tr:hover .ds-rowacts, .ds-table tbody tr:focus-within .ds-rowacts { opacity: 1; }
+.ds-rowacts:has(.ds-link-btn) { opacity: 1; }
+.ds-link-btn { border-color: var(--accent); color: var(--accent); white-space: nowrap; }
+.ds-iact { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid transparent; background: none; color: var(--faint); border-radius: 7px; cursor: pointer; }
+.ds-iact:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--border); }
+.ds-iact.danger:hover { color: var(--crit); background: var(--crit-soft); }
+
+.ds-drop { border: 1px dashed var(--border-strong); border-radius: 11px; padding: 14px; margin: 12px 15px; text-align: center; color: var(--faint); font-size: 12.5px; background: var(--panel-2); }
+.ds-drop.on { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
+.ds-drop b { color: var(--dim); }
+
 /* The PDF badge in a palette part row's right-hand meta slot. */
 .cmdk-pdf { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 7px; border: 1px solid var(--border); background: var(--panel); color: var(--crit); border-radius: 6px; cursor: pointer; vertical-align: middle; }
 .cmdk-pdf:hover { border-color: var(--accent); background: var(--accent-soft); }

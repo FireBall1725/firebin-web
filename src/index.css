@@ -471,19 +471,26 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .banner { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 11px; padding: 14px 16px; }
 
 /* ============================ Datasheets ============================ */
-/* The viewer is deliberately wider and taller than a normal modal: it holds a
-   full PDF page, and anything smaller means scrolling a document that the
-   browser could have laid out properly. */
-.ds-viewer { max-width: min(1100px, 96vw); height: 92vh; }
-.ds-viewer .modal-h h3 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ds-v-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
-.ds-v-meta { display: flex; align-items: center; gap: 8px; padding: 9px 18px; border-bottom: 1px solid var(--border); background: var(--panel-2); flex-wrap: wrap; }
-.ds-v-parts { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-left: auto; }
-.ds-v-unlinked { margin-left: auto; font-size: 12px; color: var(--faint); font-style: italic; }
-.ds-v-stage { flex: 1 1 auto; min-height: 0; background: var(--bg); display: flex; }
-/* The iframe carries the browser's PDF viewer; it needs a real height, and a
-   white background so a dark theme does not show through a loading page. */
-.ds-v-frame { flex: 1; width: 100%; height: 100%; border: none; background: #fff; }
+/* The single-datasheet page. A column that fills the viewport so the document
+   gets every pixel left after the header, rather than sitting in a fixed-height
+   box with its own scrollbar inside the page's scrollbar.
+   100dvh, not 100vh: on mobile Safari the dynamic unit accounts for the address
+   bar, which otherwise hides the bottom of the document behind it. */
+.ds-page { display: flex; flex-direction: column; gap: 10px; height: calc(100dvh - 150px); min-height: 460px; }
+.ds-page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex: none; }
+.ds-page-title { min-width: 0; flex: 1; }
+.ds-page-title h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-page-sub { font-size: 11.5px; color: var(--faint); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-page-acts { display: flex; align-items: center; gap: 8px; flex: none; flex-wrap: wrap; }
+.ds-page-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
+.ds-page-parts { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-left: auto; }
+.ds-page-parts .pchip { cursor: pointer; text-decoration: none; }
+.ds-page-parts .pchip:hover { border-color: var(--accent); color: var(--text); }
+.ds-page-unlinked { margin-left: auto; font-size: 12px; color: var(--faint); font-style: italic; }
+.ds-page-stage { flex: 1 1 auto; min-height: 0; display: flex; border: 1px solid var(--border); border-radius: 13px; overflow: hidden; background: var(--panel-2); }
+/* The object hosts the browser's own PDF viewer. It needs a real height, and a
+   white ground so a dark theme does not show through while the plugin loads. */
+.ds-page-frame { flex: 1; width: 100%; height: 100%; border: none; background: #fff; }
 
 /* The three-state control beside an MPN's datasheet link: Read here / Save a
    copy / Upload a PDF. Only the stored state gets the accent, so a row with a

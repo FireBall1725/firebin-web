@@ -24,7 +24,6 @@ import { useRealtime } from '../lib/useRealtime'
 import { usePageSize, setPageSize } from '../lib/prefs'
 import { Pager } from '../components/Pager'
 import { PartPicker } from '../components/PartPicker'
-import { DatasheetViewer } from '../components/DatasheetViewer'
 import { icon } from '../lib/icons'
 import {
   mdiDelete,
@@ -73,7 +72,6 @@ export function DatasheetsPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
-  const [viewing, setViewing] = useState<Datasheet | null>(null)
   const [linking, setLinking] = useState<Datasheet | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -348,7 +346,7 @@ export function DatasheetsPage() {
                     {shown.map((d) => {
                       const unlinked = d.parts.length === 0
                       return (
-                        <tr key={d.id} className={unlinked ? 'ds-unlinked' : ''} onClick={() => setViewing(d)}>
+                        <tr key={d.id} className={unlinked ? 'ds-unlinked' : ''} onClick={() => navigate(`/datasheets/${d.id}`)}>
                           <td>
                             <div className="ds-fcell">
                               <span className={`ds-fico ${unlinked ? 'loose' : ''}`}>
@@ -433,8 +431,6 @@ export function DatasheetsPage() {
           )}
         </div>
       </div>
-
-      {viewing && <DatasheetViewer datasheet={viewing} onClose={() => setViewing(null)} />}
 
       {linking && (
         <div className="overlay" onClick={() => setLinking(null)}>

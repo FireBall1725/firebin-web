@@ -18,11 +18,9 @@ import {
   type StorageLocation,
   type Project,
   type KicadLibraryItem,
-  type Datasheet,
 } from '../lib/api'
 import { catStyle } from '../lib/symbols'
 import { PartGraphic } from './SymbolPicker'
-import { DatasheetViewer } from './DatasheetViewer'
 import { stockLabel } from '../lib/stockState'
 import { icon } from '../lib/icons'
 import { mdiArchiveOutline, mdiArrowRight, mdiClose, mdiFilePdfBox, mdiFolderOutline, mdiMagnify, mdiTagOutline, mdiVectorSquare } from '@mdi/js'
@@ -56,10 +54,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   // them, so unlike parts and locations they cannot be preloaded and filtered
   // in the browser.
   const [kicad, setKicad] = useState<KicadLibraryItem[]>([])
-  // The part whose datasheet is open. Set by the PDF badge on a part row; the
-  // viewer sits above the palette rather than replacing it, so closing the PDF
-  // returns you to your search instead of losing it.
-  const [datasheetPart, setDatasheetPart] = useState<string | null>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -281,7 +275,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                     // eslint-disable-next-line react-hooks/refs
                     onClick={() => activate(item)}
                   >
-                    <Row item={item} onDatasheet={setDatasheetPart} />
+                    <Row item={item} onDatasheet={(pid) => { onClose(); void openPartDatasheet(pid, navigate) }} />
                   </div>
                 ))}
               </div>
@@ -295,42 +289,24 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           <span><b>esc</b> close</span>
         </div>
       </div>
-
-      {datasheetPart && (
-        <PartDatasheetViewer partID={datasheetPart} onClose={() => setDatasheetPart(null)} />
-      )}
     </div>
   )
 }
 
-// PartDatasheetViewer opens the datasheet linked to a part.
+// openPartDatasheet resolves which datasheet a part has, then goes to its page.
 //
 // The palette row only knows that a part HAS one (the has_datasheet flag from
 // the list query), not which, so the document is resolved on click. That keeps
 // the parts list one query instead of joining every datasheet into it.
-function PartDatasheetViewer({ partID, onClose }: { partID: string; onClose: () => void }) {
-  const [sheet, setSheet] = useState<Datasheet | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    api
-      .listDatasheets({ part: partID })
-      .then((list) => {
-        if (cancelled) return
-        if (list.length === 0) onClose()
-        else setSheet(list[0])
-      })
-      .catch(() => !cancelled && onClose())
-    return () => {
-      cancelled = true
-    }
-  }, [partID, onClose])
-
-  if (!sheet) return null
-  return (
-    <div onClick={(e) => e.stopPropagation()}>
-      <DatasheetViewer datasheet={sheet} onClose={onClose} />
-    </div>
-  )
+async function openPartDatasheet(partID: string, go: (to: string) => void) {
+  try {
+    const list = await api.listDatasheets({ part: partID })
+    // Fall back to the part itself rather than dead-ending: the flag can be
+    // stale if the datasheet was deleted in another tab.
+    go(list.length > 0 ? `/datasheets/${list[0].id}` : `/parts/${partID}`)
+  } catch {
+    go(`/parts/${partID}`)
+  }
 }
 
 function Row({ item, onDatasheet }: { item: Item; onDatasheet: (partID: string) => void }) {

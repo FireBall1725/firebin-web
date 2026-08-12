@@ -69,6 +69,7 @@ function crumbFor(path: string): [string, string] {
   if (path === '/') return ['Workspace', 'Dashboard']
   if (path.startsWith('/parts/')) return ['Inventory · Parts', 'Part']
   if (path.startsWith('/parts')) return ['Inventory', 'Parts']
+  if (path.startsWith('/datasheets/')) return ['Inventory · Datasheets', 'Datasheet']
   if (path.startsWith('/datasheets')) return ['Inventory', 'Datasheets']
   if (path.startsWith('/locations')) return ['Inventory', 'Locations']
   if (path.startsWith('/projects/')) return ['Projects · Boards', 'Project']

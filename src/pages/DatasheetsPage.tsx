@@ -290,13 +290,19 @@ export function DatasheetsPage() {
               <span className="cat-count">{stats.mirror_candidates}</span>
             </button>
           )}
-          <div className="ds-rail-sep" />
-          <div className="ds-rail-lbl">By category</div>
-          {categories.map((c) => (
-            <button key={c.id} onClick={() => pickCategory(c.id)} className={`cat ${category === c.id ? 'on' : ''}`}>
-              <span className="truncate">{c.name}</span>
-            </button>
-          ))}
+          {/* Only when there is something under it: a lone heading over empty
+              space reads as a list that failed to load. */}
+          {categories.length > 0 && (
+            <>
+              <div className="ds-rail-sep" />
+              <div className="ds-rail-lbl">By category</div>
+              {categories.map((c) => (
+                <button key={c.id} onClick={() => pickCategory(c.id)} className={`cat ${category === c.id ? 'on' : ''}`}>
+                  <span className="truncate">{c.name}</span>
+                </button>
+              ))}
+            </>
+          )}
         </aside>
 
         <div className="min-w-0">

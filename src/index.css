@@ -493,6 +493,14 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .ds-btn:disabled { opacity: 0.6; cursor: default; }
 .ds-btn.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
 
+/* The totals row on the datasheet settings card. Auto-fit rather than four
+   fixed columns so it reflows instead of overflowing on a narrow window. */
+.ds-set-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel-2); }
+.ds-set-val { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; color: var(--text); }
+/* Wide enough that "256 MB" does not wrap onto a second line inside its button. */
+.ds-set-sizes { max-width: 420px; }
+.ds-set-sizes .seg-btn { white-space: nowrap; }
+
 /* ── Library page ── */
 .ds-rail-sep { height: 1px; background: var(--border); margin: 6px 0; }
 .ds-rail-lbl { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); padding: 8px 14px 4px; }

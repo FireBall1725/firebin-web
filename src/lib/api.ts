@@ -1277,6 +1277,14 @@ export const api = {
   bulkMirrorDatasheets() {
     return request<{ task_id: string | null; targets: number }>('/datasheets/bulk/mirror', { method: 'POST' })
   },
+  /** Read the text out of every datasheet still pending. task_id is null when
+   *  there was nothing left to do. */
+  extractPendingDatasheets() {
+    return request<{ task_id: string | null; datasheets: number }>('/datasheets/bulk/extract', { method: 'POST' })
+  },
+  extractDatasheet(id: string) {
+    return request<{ task_id: string | null; datasheets: number }>(`/datasheets/${id}/extract`, { method: 'POST' })
+  },
   getDatasheetSettings() {
     return request<DatasheetSettings>('/settings/datasheets')
   },

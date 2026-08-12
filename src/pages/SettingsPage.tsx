@@ -9,6 +9,7 @@ import { THEMES, getTheme, applyTheme } from '../lib/themes'
 import { LabelSheetsSettings } from '../components/LabelSheetsSettings'
 import { ApiTokensSettings } from '../components/ApiTokensSettings'
 import { JobsSettings } from '../components/JobsSettings'
+import { DatasheetSettings } from '../components/DatasheetSettings'
 import { AboutSettings } from '../components/AboutSettings'
 import { UsersSettings, AccountSettings } from '../components/UsersSettings'
 import { KicadLibraryServerSettings } from '../components/KicadLibraryServerSettings'
@@ -29,6 +30,7 @@ export function SettingsPage() {
     { id: 'labels', label: 'Label sheets', desc: 'Print media' },
     { id: 'labeldesign', label: 'Label designer', desc: 'Custom layouts' },
     ...(isAdmin ? [{ id: 'enrichment', label: 'Enrichment', desc: 'Digi-Key, Nexar' }] : []),
+    ...(isAdmin ? [{ id: 'datasheets', label: 'Datasheets', desc: 'Storage, downloads' }] : []),
     { id: 'activity', label: 'Activity', desc: 'Background jobs' },
     { id: 'tokens', label: 'API tokens', desc: 'fbin_pat_…' },
     ...(isAdmin ? [{ id: 'kicadserver', label: 'KiCad library server', desc: 'Serve parts to KiCad' }] : []),
@@ -66,6 +68,7 @@ export function SettingsPage() {
           {section === 'labels' && <LabelSheetsSettings />}
           {section === 'labeldesign' && <LabelBuilder />}
           {section === 'enrichment' && <EnrichmentSection />}
+          {section === 'datasheets' && isAdmin && <DatasheetSettings />}
           {section === 'activity' && <JobsSettings />}
           {section === 'tokens' && <ApiTokensSettings />}
           {section === 'kicadserver' && isAdmin && <KicadLibraryServerSettings />}

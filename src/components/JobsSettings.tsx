@@ -8,6 +8,8 @@ import { useAuth } from '../auth/AuthContext'
 
 const TYPE_LABEL: Record<string, string> = {
   bulk_enrich: 'Bulk metadata refresh',
+  datasheet_mirror: 'Datasheet download',
+  datasheet_extract: 'Datasheet text extraction',
 }
 const label = (t: string) => TYPE_LABEL[t] ?? t
 

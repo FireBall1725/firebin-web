@@ -26,6 +26,7 @@ const API_LIBS: [string, string][] = [
   ['golang-jwt', 'MIT'],
   ['google/uuid', 'BSD-3-Clause'],
   ['go-pdf/fpdf', 'MIT'],
+  ['ledongthuc/pdf', 'BSD-3-Clause'],
   ['boombuler/barcode', 'MIT'],
   ['golang.org/x/crypto', 'BSD-3-Clause'],
   ['golang.org/x/image and the Go fonts', 'BSD-3-Clause'],

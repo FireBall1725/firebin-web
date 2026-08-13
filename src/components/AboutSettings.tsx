@@ -17,6 +17,10 @@ const WEB_LIBS: [string, string][] = [
   ['ESLint', 'MIT'],
   ['Vitest', 'MIT'],
   ['Testing Library', 'MIT'],
+  // Not a package: the flag artwork in the footer, traced from the Wikimedia
+  // Commons file. Listed anyway, because the Licences page is meant to account
+  // for everything shipped, not only what npm installed.
+  ['Flag of Canada (Wikimedia Commons)', 'Public domain'],
 ]
 
 const API_LIBS: [string, string][] = [

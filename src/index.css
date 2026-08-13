@@ -385,7 +385,12 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .search:hover { border-color: var(--border-strong); }
 .search svg { width: 15px; height: 15px; flex: none; }
 .search input { border: none; background: none; outline: none; color: var(--text); font-family: var(--mono); font-size: 12.5px; width: 100%; }
-.search-ph { flex: 1; font-family: var(--mono); font-size: 12.5px; color: var(--faint); }
+/* The placeholder truncates rather than wrapping. It shares the row with a
+   shortcut hint whose width depends on the keyboard: "Ctrl K" is twice as wide
+   as "⌘K", and left to wrap it turned the search box from one line into two on
+   a narrow window. A box that changes height depending on the reader's
+   operating system is the wrong kind of responsive. */
+.search-ph { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 12.5px; color: var(--faint); }
 .kbd { font-family: var(--mono); font-size: 10px; color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
 .menu-btn { display: none; }
 
@@ -470,6 +475,23 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 
 .banner { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 11px; padding: 14px 16px; }
 
+/* ============================ AI logs ============================ */
+/* Raw provider traffic. Dense and monospaced on purpose: this is read when
+   something is wrong, and the shape of the JSON is part of what you are
+   looking at. */
+.ai-log-list { display: flex; flex-direction: column; gap: 8px; }
+.ai-log-round { border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; background: var(--panel-2); }
+.ai-log-round.failed { border-color: color-mix(in srgb, var(--crit) 45%, transparent); }
+.ai-log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ai-log-num { font-size: 12px; font-weight: 650; color: var(--text); }
+.ai-log-err { margin-top: 6px; font-size: 12px; color: var(--crit); background: var(--crit-soft); border-radius: 6px; padding: 5px 8px; }
+.ai-log-block { margin-top: 6px; }
+.ai-log-toggle { background: none; border: none; padding: 0; cursor: pointer; font-size: 11.5px; font-weight: 600; color: var(--dim); font-family: inherit; }
+.ai-log-toggle:hover { color: var(--accent); }
+/* The pane scrolls rather than the page: a request is tens of thousands of
+   characters and would otherwise bury everything below it. */
+.ai-log-pre { margin: 6px 0 0; padding: 8px 10px; max-height: 340px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; font-family: var(--mono); font-size: 11px; line-height: 1.5; color: var(--dim); white-space: pre-wrap; word-break: break-word; }
+
 /* ============================ Datasheets ============================ */
 /* The single-datasheet page. A column that fills the viewport so the document
    gets every pixel left after the header, rather than sitting in a fixed-height
@@ -487,6 +509,57 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .ds-page-parts .pchip { cursor: pointer; text-decoration: none; }
 .ds-page-parts .pchip:hover { border-color: var(--accent); color: var(--text); }
 .ds-page-unlinked { margin-left: auto; font-size: 12px; color: var(--faint); font-style: italic; }
+
+/* Renaming in place. The pencil is quiet until the heading is hovered: it sits
+   next to the one piece of text on the page nobody should have to hunt for. */
+.ds-page-title h1 { display: flex; align-items: center; gap: 6px; }
+.ds-title-pencil { flex: none; display: inline-flex; padding: 2px; border: 0; background: none; color: var(--faint); cursor: pointer; opacity: 0; border-radius: 5px; }
+.ds-page-title:hover .ds-title-pencil, .ds-title-pencil:focus-visible { opacity: 1; }
+.ds-title-pencil:hover { color: var(--accent); background: var(--panel); }
+.ds-title-edit { display: flex; align-items: center; gap: 6px; }
+.ds-title-edit .input { font-size: 16px; font-weight: 650; padding: 4px 9px; max-width: 460px; }
+
+/* The category picker, on the detail page and on an unlinked library row. Sized
+   to a control rather than a form field: it sits in a row of tags. */
+.ds-cat-pick { font-size: 11.5px; padding: 2px 6px; height: auto; max-width: 190px; color: var(--dim); }
+.ds-cat-pick:focus { color: var(--text); }
+
+/* A part chip with an unlink control welded to its right edge. One rounded
+   outline around both, so it reads as one chip rather than a chip and a button
+   that happen to be adjacent. */
+.pchip-wrap { display: inline-flex; align-items: stretch; }
+.pchip-wrap .pchip.has-x { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 0; }
+.pchip-x { display: inline-flex; align-items: center; padding: 0 5px; border: 1px solid var(--border); border-left: 0; border-top-right-radius: 7px; border-bottom-right-radius: 7px; background: var(--panel); color: var(--faint); cursor: pointer; }
+
+/* One outline around two elements, so it highlights as one thing. Hovering
+   either half used to light only that half, which read as the chip being
+   broken in two rather than as a chip with a control on the end. */
+.pchip-wrap:hover .pchip.has-x,
+.pchip-wrap:hover .pchip-x { border-color: var(--accent); color: var(--text); }
+
+/* What replaces a chip for a few seconds after it is unlinked. Dashed, like the
+   loose-datasheet icon, because it marks something in a temporary state; the
+   struck-through MPN says which link went without needing the word "link". */
+.pchip-undo {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 11px; padding: 2px 4px 2px 9px;
+  border: 1px dashed color-mix(in srgb, var(--crit) 55%, transparent);
+  border-radius: 20px; background: color-mix(in srgb, var(--crit) 10%, transparent);
+  color: var(--faint); white-space: nowrap;
+}
+.pchip-undo s { color: var(--dim); }
+.pchip-undo button {
+  font: inherit; font-weight: 650; color: var(--accent); background: none;
+  border: 0; padding: 1px 6px; border-radius: 20px; cursor: pointer;
+}
+.pchip-undo button:hover { background: var(--accent-soft); color: var(--text); }
+
+/* On the x itself the whole chip goes red, rather than leaving an accent left
+   half joined to a red right half. The two share an edge, so a split colour
+   reads as a rendering fault; and what is about to happen applies to the whole
+   chip, not to the corner the pointer is over. */
+.pchip-wrap:has(.pchip-x:hover) .pchip.has-x,
+.pchip-wrap .pchip-x:hover { border-color: var(--crit); color: var(--crit); }
 .ds-page-stage { flex: 1 1 auto; min-height: 0; display: flex; border: 1px solid var(--border); border-radius: 13px; overflow: hidden; background: var(--panel-2); }
 /* The object hosts the browser's own PDF viewer. It needs a real height, and a
    white ground so a dark theme does not show through while the plugin loads. */
@@ -522,7 +595,9 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
    reachable. Every column but Document is a fixed size; Document takes what is
    left. Below min-width the wrapper scrolls rather than clipping. */
 .ds-table { width: 100%; border-collapse: collapse; min-width: 620px; table-layout: fixed; }
-.ds-table col.ds-c-linked { width: 140px; }
+/* 168px fits a full module MPN (ESP32-C6-MINI-1-N4) without truncating, which
+   is the common case; anything longer ellipsises rather than being clipped. */
+.ds-table col.ds-c-linked { width: 168px; }
 .ds-table col.ds-c-size { width: 74px; }
 .ds-table col.ds-c-source { width: 112px; }
 .ds-table col.ds-c-ai { width: 94px; }
@@ -550,8 +625,14 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .ds-ftitle { display: block; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-fname { display: block; font-size: 11px; color: var(--faint); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.ds-chips { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.ds-chips .pchip { cursor: pointer; }
+.ds-chips { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-width: 0; }
+/* The chip truncates its own text rather than being sliced by the cell.
+   table-layout is fixed and the td clips, so an MPN wider than the column used
+   to lose the chip's right border and rounded end with it, which reads as a
+   rendering fault rather than a long name. inline-block, not the inherited
+   inline-flex: ellipsis does not apply to an anonymous flex item, so the pill
+   would still have been cut. The full MPN is on the title attribute. */
+.ds-chips .pchip { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .ds-chips .pchip:hover { border-color: var(--accent); color: var(--text); }
 
 /* Row actions stay hidden until the row is hovered or focused, except the
@@ -565,7 +646,11 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .ds-iact:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--border); }
 .ds-iact.danger:hover { color: var(--crit); background: var(--crit-soft); }
 
-.ds-drop { border: 1px dashed var(--border-strong); border-radius: 11px; padding: 14px; margin: 12px 15px; text-align: center; color: var(--faint); font-size: 12.5px; background: var(--panel-2); }
+/* Full width and the card's own radius, because it now sits beside the table
+   rather than inside it. The 15px side margin it used to carry was there to
+   inset it within the card's padding, and left outside it just made the zone
+   narrower than the list it belongs to. */
+.ds-drop { border: 1px dashed var(--border-strong); border-radius: 13px; padding: 14px; margin: 0 0 12px; text-align: center; color: var(--faint); font-size: 12.5px; background: var(--panel-2); }
 .ds-drop.on { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
 .ds-drop b { color: var(--dim); }
 
@@ -759,6 +844,19 @@ label.fieldlabel > span { display: block; margin-bottom: 5px; font-size: 12px; f
 .md a { color: var(--accent); text-decoration: underline; }
 .md s { color: var(--faint); }
 .md-hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+
+/* A page citation the reader can act on. A button rather than an anchor because
+   it moves a viewer already on screen and goes nowhere; a dotted underline, not
+   a solid one, so it reads as a different kind of link from the ones that leave
+   the app. */
+.md-pageref {
+  font: inherit; color: var(--accent); background: none; border: 0;
+  padding: 0; cursor: pointer;
+  text-decoration: underline; text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.md-pageref:hover { text-decoration-style: solid; }
+.md-pageref:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
 .md-quote {
   margin: 0 0 8px; padding: 2px 0 2px 12px;

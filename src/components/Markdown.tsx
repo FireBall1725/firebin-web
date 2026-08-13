@@ -2,6 +2,7 @@
 // Copyright (C) 2026 FireBall1725
 
 import { lazy, Suspense, type ReactNode } from 'react'
+import { useDatasheetSubject, useDatasheetViewer } from '../lib/datasheetViewer'
 
 // Prism and its grammars are about 26 kB gzipped and only ever needed when an
 // answer contains a code block, so they load on first use rather than on every
@@ -262,6 +263,81 @@ function inline(text: string): ReactNode[] {
   return out
 }
 
+// A citation the model wrote in prose: "page 51", "pages 51-53", "p. 12".
+//
+// Matched rather than asked for. A format instruction in the system prompt is
+// only followed some of the time, and an answer that cites a page in plain
+// English is the common case; this reads the citation that is already there.
+//
+// Deliberately narrow: the word, then a number, with an optional second number
+// for a range. A bare number is never a citation, or every quantity in an answer
+// would become a link.
+//
+// The first alternative is the citation bracket gpt-oss reaches for, whatever
+// it puts inside: 【51†L4-L11】 when it follows its own training, 【page 51】
+// when it half-follows the system prompt's request for words. The brackets are
+// not rendered by anything and reach the reader as literal characters, so the
+// whole marker is consumed and replaced with "page 51".
+const PAGE_REF = /【\s*(?:pages?|pp?\.)?\s*(\d{1,4})[^】]*】|\b(?:pages?|pp?\.)\s*(\d{1,4})(?:\s*(?:[-–—]|to|and)\s*\d{1,4})?/gi
+
+function pageRefs(text: string, nextKey: () => number): ReactNode[] {
+  const out: ReactNode[] = []
+  const re = new RegExp(PAGE_REF.source, PAGE_REF.flags)
+  let last = 0
+  // Where the previous marker ended, so two of them butted together can be
+  // told apart. A model citing two pages writes 【page 4】【page 51】, and
+  // dropping the brackets from that would read as "page 4page 51".
+  let prevMarkerEnd = -1
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(<span key={nextKey()}>{text.slice(last, m.index)}</span>)
+    const marker = m[1] !== undefined
+    if (marker) {
+      // The brackets were doing the separating. Take them away and "controller
+      // 【page 4】" becomes "controllerpage 4", so put back whatever they held
+      // apart: a comma between two citations, a space after a word.
+      if (prevMarkerEnd === m.index) out.push(<span key={nextKey()}>, </span>)
+      else if (/\S/.test(text[m.index - 1] ?? ' ')) out.push(<span key={nextKey()}>{' '}</span>)
+    }
+    const page = Number(marker ? m[1] : m[2])
+    out.push(<PageRef key={nextKey()} page={page} label={marker ? `page ${page}` : m[0]} />)
+    last = m.index + m[0].length
+    if (marker) prevMarkerEnd = last
+  }
+  if (out.length === 0) return [<span key={nextKey()}>{text}</span>]
+  if (last < text.length) out.push(<span key={nextKey()}>{text.slice(last)}</span>)
+  return out
+}
+
+// PageRef turns a citation into whichever of two moves is available.
+//
+// With the document open beside the answer it moves that viewer. On the
+// assistant page, where the answer is about a datasheet that is not on screen,
+// it opens the datasheet at that page instead. With neither, it is the words
+// the model wrote, unchanged: a link that goes nowhere is worse than no link.
+//
+// Either way the page has to exist. A page count of 0 means it is not known
+// here, which is the normal case for the second route, and nothing is rejected.
+function PageRef({ page, label }: { page: number; label: string }) {
+  const viewer = useDatasheetViewer()
+  const subject = useDatasheetSubject()
+  const target = viewer ?? subject
+  const go = viewer ? viewer.jump : subject?.open
+  if (!target || !go || page < 1 || (target.pageCount > 0 && page > target.pageCount)) {
+    return <span>{label}</span>
+  }
+  return (
+    <button
+      type="button"
+      className="md-pageref"
+      title={viewer ? `Go to page ${page}` : `Open the datasheet at page ${page}`}
+      onClick={() => go(page)}
+    >
+      {label}
+    </button>
+  )
+}
+
 // emphasis handles bold, then strikethrough, then italic. Bold first, or its
 // markers are eaten as two italics.
 function emphasis(text: string, nextKey: () => number): ReactNode[] {
@@ -285,7 +361,7 @@ function emphasis(text: string, nextKey: () => number): ReactNode[] {
           || (piece.startsWith('_') && piece.endsWith('_') && piece.length > 2)) {
           out.push(<em key={nextKey()}>{piece.slice(1, -1)}</em>)
         } else {
-          out.push(<span key={nextKey()}>{piece}</span>)
+          out.push(...pageRefs(piece, nextKey))
         }
       }
     }

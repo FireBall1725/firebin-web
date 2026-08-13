@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 //
-// The "/" command palette: one box to jump to anything. Free text searches parts
-// (name, MPN, IPN, description, footprint, keywords, category), locations, and
-// projects; typed text that matches a known footprint/type/bin can be pinned as a
-// facet chip, so you can lock "footprint: 0603" and then type "resistor" or "1k".
-// Parts, locations and projects are matched client-side over the already-loaded
-// lists — fast, and smarter than the backend's name/MPN-only search. KiCad
-// symbols and footprints are the exception: there are tens of thousands of them,
-// so those are searched server-side and debounced.
+// The command palette: one box to jump to anything. Free text searches parts
+// (name, MPN, IPN, description, footprint, keywords, category), datasheets,
+// locations, and projects; typed text that matches a known footprint/type/bin can
+// be pinned as a facet chip, so you can lock "footprint: 0603" and then type
+// "resistor" or "1k". All of those are matched client-side over the
+// already-loaded lists — fast, and smarter than the backend's name/MPN-only
+// search. KiCad symbols and footprints are the exception: there are tens of
+// thousands of them, so those are searched server-side and debounced.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   api,
   type Part,
   type Category,
+  type Datasheet,
   type StorageLocation,
   type Project,
   type KicadLibraryItem,
@@ -33,6 +34,7 @@ const FACET_LABEL: Record<FacetKind, string> = { footprint: 'Footprint', type: '
 type Item =
   | { kind: 'facet'; id: string; facet: Facet }
   | { kind: 'part'; id: string; part: Part; catName?: string }
+  | { kind: 'datasheet'; id: string; ds: Datasheet }
   | { kind: 'location'; id: string; loc: StorageLocation }
   | { kind: 'project'; id: string; project: Project }
   | { kind: 'command'; id: string; label: string; run: () => void }
@@ -46,6 +48,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [locations, setLocations] = useState<StorageLocation[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [datasheets, setDatasheets] = useState<Datasheet[]>([])
   const [text, setText] = useState('')
   const [facets, setFacets] = useState<Facet[]>([])
   const [sel, setSel] = useState(0)
@@ -61,6 +64,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     api.listCategories().then(setCategories).catch(() => undefined)
     api.listLocations().then(setLocations).catch(() => undefined)
     api.listProjects().then(setProjects).catch(() => undefined)
+    api.listDatasheets().then(setDatasheets).catch(() => undefined)
   }, [])
 
   // Debounced so a fast typist issues one query per pause, not one per keystroke.
@@ -146,6 +150,24 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       parts.filter(partMatches).slice(0, 8).forEach((p) => out.push({ kind: 'part', id: `part-${p.id}`, part: p, catName: catName(p) }))
     }
 
+    // Datasheets, by their own title and filename as well as by whatever they
+    // are linked to.
+    //
+    // A group of their own rather than only the PDF badge on a part row: that
+    // badge is reached through a part, so a document with no part linked to it
+    // was unreachable from here entirely — which is exactly the loose upload the
+    // Unlinked bucket exists for.
+    if (t) {
+      datasheets
+        .filter((d) => {
+          const hay = [d.title, d.filename, ...d.parts.flatMap((x) => [x.mpn, x.part_name])]
+            .filter(Boolean).join(' ').toLowerCase()
+          return words.every((w) => hay.includes(w))
+        })
+        .slice(0, 5)
+        .forEach((d) => out.push({ kind: 'datasheet', id: `ds-${d.id}`, ds: d }))
+    }
+
     // Locations + projects (free-text only).
     if (t) {
       locations
@@ -180,7 +202,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     return out
     // `kicad` belongs here: it lands asynchronously after the debounced search
     // resolves, so leaving it out froze the rows at the empty first render.
-  }, [text, facets, parts, categories, locations, projects, packages, kicad])
+  }, [text, facets, parts, categories, locations, projects, datasheets, packages, kicad])
 
   useEffect(() => { setSel(0) }, [text, facets])
 
@@ -188,6 +210,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     switch (item.kind) {
       case 'facet': addFacet(item.facet); break
       case 'part': navigate(`/parts/${item.part.id}`); onClose(); break
+      case 'datasheet': navigate(`/datasheets/${item.ds.id}`); onClose(); break
       case 'location': navigate('/locations'); onClose(); break
       case 'project': navigate(`/projects/${item.project.id}`); onClose(); break
       case 'command': item.run(); onClose(); break
@@ -210,6 +233,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const order: { kind: Item['kind']; label: string }[] = [
     { kind: 'facet', label: 'Filters' },
     { kind: 'part', label: 'Parts' },
+    { kind: 'datasheet', label: 'Datasheets' },
     { kind: 'location', label: 'Locations' },
     { kind: 'project', label: 'Projects' },
     // Must sit here, not at the end: rows are numbered in the order this array
@@ -249,14 +273,14 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={facets.length ? 'Narrow further…' : 'Search parts, footprints, bins…'}
+            placeholder={facets.length ? 'Narrow further…' : 'Search parts, datasheets, bins…'}
             aria-label="Command palette search"
           />
         </div>
 
         <div className="cmdk-results">
           {items.length === 0 ? (
-            <div className="cmdk-empty">No matches. Try a part name, MPN, footprint, or bin.</div>
+            <div className="cmdk-empty">No matches. Try a part name, MPN, footprint, bin, or a datasheet title.</div>
           ) : (
             sections.map(({ kind, label, rows }) => (
               <div key={kind}>
@@ -350,6 +374,26 @@ function Row({ item, onDatasheet }: { item: Item; onDatasheet: (partID: string) 
           )}
           {stockLabel(item.part)}
         </span>
+      </>
+    )
+  }
+  if (item.kind === 'datasheet') {
+    const linked = item.ds.parts.map((p) => p.mpn || p.part_name).filter(Boolean)
+    return (
+      <>
+        {icon(mdiFilePdfBox)}
+        <div className="main">
+          <div className="title">{item.ds.title || item.ds.filename}</div>
+          {/* What it is linked to, or that it is not. "Unlinked" is said out
+              loud rather than left blank: it is the reason this row is the only
+              way to reach the document. */}
+          <div className="sub">
+            {linked.length ? linked.slice(0, 3).join(' · ') : 'Unlinked'}
+          </div>
+        </div>
+        {!!item.ds.page_count && (
+          <span className="meta">{item.ds.page_count} page{item.ds.page_count === 1 ? '' : 's'}</span>
+        )}
       </>
     )
   }

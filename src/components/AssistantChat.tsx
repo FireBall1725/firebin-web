@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 FireBall1725
 
-import { useEffect, useRef, useState } from 'react'
-import { ApiError, api, streamAssistantMessage, type AssistantStep, type Conversation, type ConversationMessage } from '../lib/api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ApiError, api, streamAssistantMessage, type AssistantRoundLog, type AssistantStep, type Conversation, type ConversationMessage } from '../lib/api'
 import { Markdown } from './Markdown'
 import { AssistantStatus } from './AssistantStatus'
+import { RoundLogs } from './AssistantRoundLogs'
+import { DatasheetSubjectProvider, type DatasheetSubject } from '../lib/datasheetViewer'
 
 // The conversation view, shared by the sidebar page and the popup so a question
 // asked from a part page behaves the same as one asked from the page, and both
@@ -48,14 +51,32 @@ export function AssistantChat({
   // and refetching then would replace the answer being written with the empty
   // row the server has so far.
   const ownRef = useRef<Set<string>>(new Set())
+  // The datasheet a loaded conversation was started from, so its answers can
+  // cite pages of a document this view is not showing. Taken from the stored
+  // conversation rather than the props: opening one from the list passes no
+  // subject, and that is exactly the case with no viewer to fall back on.
+  const [subjectDatasheet, setSubjectDatasheet] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
-    if (!conversationId) { setMessages([]); return }
+    if (!conversationId) { setMessages([]); setSubjectDatasheet(null); return }
     if (ownRef.current.has(conversationId)) return
     api.getConversation(conversationId)
-      .then((c: Conversation) => setMessages(c.messages ?? []))
+      .then((c: Conversation) => {
+        setMessages(c.messages ?? [])
+        setSubjectDatasheet(c.subject_kind === 'datasheet' ? (c.subject_id ?? null) : null)
+      })
       .catch(() => setErr('Could not load that conversation.'))
   }, [conversationId])
+
+  // Props win: on the datasheet page the popup is told its subject up front,
+  // and the answer streams in before the conversation is ever fetched.
+  const datasheetID = (subjectKind === 'datasheet' ? subjectId : undefined) ?? subjectDatasheet
+  const subject = useMemo<DatasheetSubject | null>(() => (
+    datasheetID
+      ? { datasheetID, pageCount: 0, open: (page) => navigate(`/datasheets/${datasheetID}?page=${page}`) }
+      : null
+  ), [datasheetID, navigate])
 
   // Scroll the log itself rather than calling scrollIntoView on its last child.
   // scrollIntoView moves whatever ancestor it has to, including the page, and
@@ -114,6 +135,13 @@ export function AssistantChat({
               break
             case 'tool':
               setActivity(`Looking up ${String(data.tool ?? 'something')}…`)
+              break
+            case 'retract':
+              // The server worked out that what it just streamed was a tool
+              // call the model wrote by mistake, not an answer. Take it back
+              // off the screen rather than leaving the user reading JSON until
+              // the real answer lands on top of it.
+              setStreaming('')
               break
             case 'usage': {
               const u = data.usage as { input_tokens?: number; output_tokens?: number } | undefined
@@ -181,6 +209,7 @@ export function AssistantChat({
   const visible = messages.filter((m) => m.content.trim() !== '')
 
   return (
+    <DatasheetSubjectProvider value={subject}>
     <div className="flex flex-col" style={{ height: compact ? 420 : '100%', minHeight: 0 }}>
       <div ref={logRef} style={{ flex: 1, overflowY: 'auto', padding: compact ? 12 : 4 }}>
         {visible.length === 0 && !busy && (
@@ -241,6 +270,12 @@ export function AssistantChat({
             </div>
           </details>
         )}
+
+        {/* Outside the steps panel on purpose. steps is only set for the turn
+            just asked, so nesting this inside it left a conversation you opened
+            from the list with no way in, which is exactly when you want it.
+            Fetched on expand: a round's request is tens of kilobytes. */}
+        {conversationId && <RawExchange conversationId={conversationId} />}
       </div>
 
       <div className="flex gap-2" style={{ paddingTop: 10, alignItems: 'flex-end' }}>
@@ -252,19 +287,78 @@ export function AssistantChat({
           ref={boxRef}
           className="input"
           rows={1}
-          style={{ flex: 1, resize: 'none', overflowY: 'auto', lineHeight: 1.5, minHeight: 38 }}
+          style={{ flex: 1, minWidth: 0, resize: 'none', overflowY: 'auto', lineHeight: 1.5, minHeight: 38 }}
           value={question}
           disabled={busy}
-          placeholder="Ask about your parts…    (shift-enter for a new line)"
+          // The hint is dropped in the popup. At 420px wide it pushed the
+          // placeholder onto a second line, which made the box open two rows
+          // tall for a question nobody had typed yet.
+          placeholder={compact ? 'Ask about your parts…' : 'Ask about your parts…    (shift-enter for a new line)'}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() }
           }}
         />
-        <button className="btn" onClick={() => void send()} disabled={busy || question.trim() === ''}>
+        {/* Fixed width, because the label changes. "Asking…" is wider than
+            "Ask", and letting the button size itself meant sending a question
+            shrank the box beside it and reflowed the whole row. */}
+        <button
+          className="btn"
+          style={{ width: 82, justifyContent: 'center', flex: 'none' }}
+          onClick={() => void send()}
+          disabled={busy || question.trim() === ''}
+        >
           {busy ? 'Asking…' : 'Ask'}
         </button>
       </div>
+    </div>
+    </DatasheetSubjectProvider>
+  )
+}
+
+// RawExchange loads the provider calls behind an answer, on demand.
+//
+// Deliberately a second click past "Looked at N things": the tool list answers
+// "is this answer trustworthy", and this answers "why did the model do that",
+// which is a rarer and much heavier question.
+function RawExchange({ conversationId }: { conversationId: string }) {
+  const [open, setOpen] = useState(false)
+  const [logs, setLogs] = useState<AssistantRoundLog[] | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  // Fetched every time it is opened, never cached.
+  //
+  // Caching on `logs` being set was wrong twice over: an empty array is truthy,
+  // so expanding this while the turn was still streaming stored "no calls" and
+  // never looked again, which read as a broken feature; and a follow-up question
+  // in the same conversation adds rounds that a cached list would not show.
+  const load = () => {
+    if (open) { setOpen(false); return }
+    setOpen(true)
+    setErr(null)
+    api
+      .conversationLogs(conversationId)
+      .then(setLogs)
+      .catch(() => setErr('Could not load the logs for this conversation.'))
+  }
+
+  useEffect(() => {
+    setOpen(false)
+    setLogs(null)
+    setErr(null)
+  }, [conversationId])
+
+  return (
+    <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+      <button className="ai-log-toggle" onClick={load}>
+        {open ? '▾' : '▸'} What was sent to the model
+        {open && logs && (
+          <span className="c-faint" style={{ marginLeft: 6, fontWeight: 400 }}>(click to close)</span>
+        )}
+      </button>
+      {open && err && <p className="c-crit" style={{ fontSize: 12 }}>{err}</p>}
+      {open && !err && !logs && <p className="c-faint" style={{ fontSize: 12 }}>Loading…</p>}
+      {open && logs && <RoundLogs logs={logs} />}
     </div>
   )
 }

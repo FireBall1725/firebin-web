@@ -418,10 +418,35 @@ export interface Datasheet {
   language?: string
   text_status: DatasheetTextStatus
   extracted_at?: string
+  /** The document's own category, set by hand. Absent is the normal state for a
+   *  mirrored datasheet, which is filed under the categories of its linked
+   *  parts; this is how a loose upload gets sorted without inventing a part. */
+  category_id?: string
   created_at: string
   updated_at: string
   /** Empty for a document not linked to a part yet, which is allowed. */
   parts: DatasheetPartLink[]
+}
+
+/** One provider call. A turn produces several: the model is asked, tools run,
+ *  and it is asked again. request and response are raw provider JSON. */
+export interface AssistantRoundLog {
+  id: string
+  conversation_id?: string
+  round: number
+  provider: string
+  model: string
+  url?: string
+  request?: string
+  response?: string
+  /** The model's reasoning, when it reports any. Never shown as an answer. */
+  thinking?: string
+  status?: number
+  input_tokens: number
+  output_tokens: number
+  duration_ms: number
+  error?: string
+  created_at: string
 }
 
 export interface DatasheetStats {
@@ -1251,7 +1276,10 @@ export const api = {
     if (opts.title) form.append('title', opts.title)
     return request<Datasheet>('/datasheets', { method: 'POST', body: form })
   },
-  updateDatasheet(id: string, body: { title?: string | null }) {
+  /** Partial: only the keys present are changed, and null clears one. Sending
+   *  {category_id} alone leaves the title alone, which is what the detail page
+   *  and the library's per-row category picker both rely on. */
+  updateDatasheet(id: string, body: { title?: string | null; category_id?: string | null }) {
     return request<Datasheet>(`/datasheets/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
   },
   deleteDatasheet(id: string) {
@@ -1349,6 +1377,19 @@ export const api = {
   },
   getConversation(id: string) {
     return request<Conversation>(`/assistant/conversations/${id}`)
+  },
+  /** Every provider call made in a conversation: what was sent, what came
+   *  back, and what the model reasoned. The owner's own data, so scoped to
+   *  them by the server. */
+  conversationLogs(id: string) {
+    return request<AssistantRoundLog[]>(`/assistant/conversations/${id}/logs`)
+  },
+  /** Instance-wide, admin only: it crosses users. */
+  assistantLogs(limit = 50) {
+    return request<AssistantRoundLog[]>(`/settings/assistant/logs?limit=${limit}`)
+  },
+  clearAssistantLogs() {
+    return request<{ deleted: number }>('/settings/assistant/logs', { method: 'DELETE' })
   },
   deleteConversation(id: string) {
     return request<{ status: string }>(`/assistant/conversations/${id}`, { method: 'DELETE' })

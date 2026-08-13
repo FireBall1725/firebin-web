@@ -198,6 +198,19 @@ export function DatasheetsPage() {
     }
   }
 
+  // Set straight from the row. The loose pile is where this matters and it is
+  // usually several documents at a sitting; sending someone into each detail
+  // page to file it would make the Unlinked bucket a chore rather than a
+  // staging area.
+  const fileUnder = async (d: Datasheet, categoryID: string) => {
+    try {
+      const next = await api.updateDatasheet(d.id, { category_id: categoryID || null })
+      setSheets((list) => list.map((x) => (x.id === d.id ? { ...x, category_id: next.category_id } : x)))
+    } catch {
+      setMsg('Could not file that datasheet.')
+    }
+  }
+
   const linkTo = async (partID: string) => {
     if (!linking) return
     try {
@@ -311,113 +324,142 @@ export function DatasheetsPage() {
             </div>
           </div>
 
+          {/* Above the table, not under it. Adding a document is what you came
+              here to do, and it was previously below however many rows the page
+              was showing — off screen on a full library. Outside the card too,
+              so it reads as an action on the page rather than a last row of the
+              list. Shown on the empty state as well, where it is the only thing
+              to do. */}
+          {canWrite && (
+            <div className={`ds-drop ${dragging ? 'on' : ''}`}>
+              Drop a PDF here to add it. <b>Unlinked is fine</b> — link it to a part whenever you like.
+            </div>
+          )}
+
           {loading ? (
             <div className="card"><p className="c-faint" style={{ textAlign: 'center', padding: 40 }}>Loading…</p></div>
           ) : sheets.length === 0 ? (
             <div className="card"><p className="c-faint" style={{ textAlign: 'center', padding: 40 }}>{emptyText}</p></div>
           ) : (
-            <div className="card">
-              <div className="ds-tblwrap">
-                <table className="ds-table">
-                  {/* Fixed layout needs declared widths; Document is the one
-                      column with none, so it absorbs whatever is left. */}
-                  <colgroup>
-                    <col />
-                    <col className="ds-c-linked" />
-                    <col className="ds-c-size" />
-                    <col className="ds-c-source" />
-                    <col className="ds-c-ai" />
-                    <col className="ds-c-act" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Document</th>
-                      <th>Linked to</th>
-                      {/* No Pages column: the count already rides on the file
-                          icon, and a second copy cost the width that pushed the
-                          Link-to-part button off the card. */}
-                      <th style={{ textAlign: 'right' }}>Size</th>
-                      <th>Source</th>
-                      <th>Assistant</th>
-                      <th aria-label="Actions" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {shown.map((d) => {
-                      const unlinked = d.parts.length === 0
-                      return (
-                        <tr key={d.id} className={unlinked ? 'ds-unlinked' : ''} onClick={() => navigate(`/datasheets/${d.id}`)}>
-                          <td>
-                            <div className="ds-fcell">
-                              <span className={`ds-fico ${unlinked ? 'loose' : ''}`}>
-                                {icon(mdiFilePdfBox, { size: 17 })}
-                                {!!d.page_count && <span className="ds-pgs">{d.page_count}</span>}
-                              </span>
-                              <span className="min-w-0">
-                                <span className="ds-ftitle">{d.title || d.filename}</span>
-                                <span className="ds-fname mono">{d.filename}</span>
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            {unlinked ? (
-                              <span className="ds-loose-note">not linked to a part</span>
-                            ) : (
-                              <span className="ds-chips">
-                                {d.parts.slice(0, 2).map((p) => (
-                                  <button
-                                    key={p.part_id}
-                                    className="pchip"
-                                    title={`Open ${p.part_name}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      navigate(`/parts/${p.part_id}`)
-                                    }}
+            <>
+              <div className="card">
+                <div className="ds-tblwrap">
+                  <table className="ds-table">
+                    {/* Fixed layout needs declared widths; Document is the one
+                        column with none, so it absorbs whatever is left. */}
+                    <colgroup>
+                      <col />
+                      <col className="ds-c-linked" />
+                      <col className="ds-c-size" />
+                      <col className="ds-c-source" />
+                      <col className="ds-c-ai" />
+                      <col className="ds-c-act" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>Document</th>
+                        <th>Linked to</th>
+                        {/* No Pages column: the count already rides on the file
+                            icon, and a second copy cost the width that pushed the
+                            Link-to-part button off the card. */}
+                        <th style={{ textAlign: 'right' }}>Size</th>
+                        <th>Source</th>
+                        <th>Assistant</th>
+                        <th aria-label="Actions" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shown.map((d) => {
+                        const unlinked = d.parts.length === 0
+                        return (
+                          <tr key={d.id} className={unlinked ? 'ds-unlinked' : ''} onClick={() => navigate(`/datasheets/${d.id}`)}>
+                            <td>
+                              <div className="ds-fcell">
+                                <span className={`ds-fico ${unlinked ? 'loose' : ''}`}>
+                                  {icon(mdiFilePdfBox, { size: 17 })}
+                                  {!!d.page_count && <span className="ds-pgs">{d.page_count}</span>}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="ds-ftitle">{d.title || d.filename}</span>
+                                  <span className="ds-fname mono">{d.filename}</span>
+                                </span>
+                              </div>
+                            </td>
+                            <td onClick={(e) => unlinked && e.stopPropagation()}>
+                              {unlinked ? (
+                                // A category picker in place of the part chips.
+                                // With no part to borrow a category from, this is
+                                // the only thing that files the document, and the
+                                // cell is otherwise saying nothing but "empty".
+                                canWrite ? (
+                                  <select
+                                    className="input ds-cat-pick"
+                                    value={d.category_id ?? ''}
+                                    title="File this datasheet under a category"
+                                    onChange={(e) => void fileUnder(d, e.target.value)}
                                   >
-                                    {p.mpn || p.part_name}
-                                  </button>
-                                ))}
-                                {d.parts.length > 2 && <span className="c-faint" style={{ fontSize: 11 }}>+{d.parts.length - 2}</span>}
-                              </span>
-                            )}
-                          </td>
-                          <td className="ds-num">{prettyBytes(d.size_bytes)}</td>
-                          <td>
-                            <span className="tag">{d.origin === 'mirror' ? 'Mirrored' : 'Upload'}</span>
-                            {d.language && d.language !== 'en' && (
-                              <span className="tag ds-lang" style={{ marginLeft: 4 }}>{d.language.toUpperCase()}</span>
-                            )}
-                          </td>
-                          <td><TextStatus d={d} /></td>
-                          <td>
-                            <div className="ds-rowacts" onClick={(e) => e.stopPropagation()}>
-                              {canWrite && unlinked ? (
-                                <button className="btn sm ds-link-btn" onClick={() => setLinking(d)}>Link to part</button>
-                              ) : canWrite ? (
-                                <button className="ds-iact" title="Link another part" aria-label="Link another part" onClick={() => setLinking(d)}>
-                                  {icon(mdiLinkVariant, { size: 15 })}
-                                </button>
-                              ) : null}
-                              {canWrite && (
-                                <button className="ds-iact danger" title="Delete" aria-label="Delete" onClick={() => remove(d)}>
-                                  {icon(mdiDelete, { size: 15 })}
-                                </button>
+                                    <option value="">Uncategorised</option>
+                                    {categories.map((c) => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="ds-loose-note">
+                                    {categories.find((c) => c.id === d.category_id)?.name ?? 'not linked to a part'}
+                                  </span>
+                                )
+                              ) : (
+                                <span className="ds-chips">
+                                  {d.parts.slice(0, 2).map((p) => (
+                                    <button
+                                      key={p.part_id}
+                                      className="pchip"
+                                      title={`Open ${p.part_name}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        navigate(`/parts/${p.part_id}`)
+                                      }}
+                                    >
+                                      {p.mpn || p.part_name}
+                                    </button>
+                                  ))}
+                                  {d.parts.length > 2 && <span className="c-faint" style={{ fontSize: 11 }}>+{d.parts.length - 2}</span>}
+                                </span>
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {canWrite && (
-                <div className={`ds-drop ${dragging ? 'on' : ''}`}>
-                  Drop a PDF here to add it. <b>Unlinked is fine</b> — link it to a part whenever you like.
+                            </td>
+                            <td className="ds-num">{prettyBytes(d.size_bytes)}</td>
+                            <td>
+                              <span className="tag">{d.origin === 'mirror' ? 'Mirrored' : 'Upload'}</span>
+                              {d.language && d.language !== 'en' && (
+                                <span className="tag ds-lang" style={{ marginLeft: 4 }}>{d.language.toUpperCase()}</span>
+                              )}
+                            </td>
+                            <td><TextStatus d={d} /></td>
+                            <td>
+                              <div className="ds-rowacts" onClick={(e) => e.stopPropagation()}>
+                                {canWrite && unlinked ? (
+                                  <button className="btn sm ds-link-btn" onClick={() => setLinking(d)}>Link to part</button>
+                                ) : canWrite ? (
+                                  <button className="ds-iact" title="Link another part" aria-label="Link another part" onClick={() => setLinking(d)}>
+                                    {icon(mdiLinkVariant, { size: 15 })}
+                                  </button>
+                                ) : null}
+                                {canWrite && (
+                                  <button className="ds-iact danger" title="Delete" aria-label="Delete" onClick={() => remove(d)}>
+                                    {icon(mdiDelete, { size: 15 })}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-
+              </div>
+              {/* Outside the card, matching Parts. The pager is about the list,
+                  not a row in it. */}
               <Pager
                 page={pageNo}
                 totalPages={totalPages}
@@ -427,7 +469,7 @@ export function DatasheetsPage() {
                 onPageSize={setPageSize}
                 noun="documents"
               />
-            </div>
+            </>
           )}
         </div>
       </div>

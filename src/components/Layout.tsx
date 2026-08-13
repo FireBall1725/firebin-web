@@ -43,6 +43,15 @@ import { currentMode, toggleMode } from '../lib/themes'
 
 type NavDef = { to: string; labelKey: string; end?: boolean; icon: React.ReactNode }
 
+// The palette shortcut as this keyboard writes it. Cmd on a Mac, Ctrl
+// everywhere else: a hint that names the wrong key is worse than none.
+//
+// navigator.platform is deprecated and still the only thing every browser
+// agrees on here; userAgent is the fallback for the ones that have dropped it.
+// Computed once, because it cannot change while the page is open.
+const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent)
+const PALETTE_KEY = isApple ? '⌘K' : 'Ctrl K'
+
 // navFor builds the sidebar. Assistant appears only when it is switched on:
 // a nav item that leads to a page saying the feature is off is worse than no
 // nav item.
@@ -239,10 +248,10 @@ export function Layout() {
             <h1>{title}</h1>
           </div>
 
-          <button className="search" onClick={() => setPaletteOpen(true)} aria-label="Open search (press /)">
+          <button className="search" onClick={() => setPaletteOpen(true)} aria-label={`Open search (${PALETTE_KEY})`}>
             {icon(mdiMagnify)}
             <span className="search-ph">Search MPN, part, bin…</span>
-            <span className="kbd">/</span>
+            <span className="kbd">{PALETTE_KEY}</span>
           </button>
 
           <div className="scan-split">

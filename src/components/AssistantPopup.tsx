@@ -103,14 +103,18 @@ export function AssistantPopup() {
             />
             {conversationId && (
               // The popup writes to the same log as the page, so there is
-              // somewhere to go back to.
-              <button
-                className="btn ghost"
-                style={{ marginTop: 8, fontSize: 12 }}
-                onClick={() => { setOpen(false); navigate(`/assistant?c=${conversationId}`) }}
-              >
-                Open in the assistant page
-              </button>
+              // somewhere to go back to. A link rather than a button: it is a
+              // way out, not one of the panel's controls, and as a full-width
+              // ghost button it read as the second half of the composer.
+              <div style={{ marginTop: 8, textAlign: 'right' }}>
+                <button
+                  className="link"
+                  style={{ fontSize: 12 }}
+                  onClick={() => { setOpen(false); navigate(`/assistant?c=${conversationId}`) }}
+                >
+                  Open in the assistant page
+                </button>
+              </div>
             )}
           </div>
         </div>

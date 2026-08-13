@@ -2,7 +2,8 @@
 // Copyright (C) 2026 FireBall1725
 
 import { useCallback, useEffect, useState } from 'react'
-import { api, type AIProviderStatus, type AISettings as AISettingsData, type AITestResult } from '../lib/api'
+import { api, type AIProviderStatus, type AISettings as AISettingsData, type AITestResult, type AssistantRoundLog } from '../lib/api'
+import { RoundLogs } from './AssistantRoundLogs'
 
 // OTHER is the sentinel option that switches a model picker to free text. A
 // model name is never this.
@@ -89,6 +90,8 @@ export function AISettings() {
       {data.providers.map((p) => (
         <AIProviderCard key={p.name} p={p} onSaved={load} />
       ))}
+
+      <AssistantLogsCard />
     </div>
   )
 }
@@ -311,6 +314,71 @@ function AIProviderCard({ p, onSaved }: { p: AIProviderStatus; onSaved: () => vo
             ) : null}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// AssistantLogsCard is the instance-wide view of what has been sent to the
+// model recently, for when something went wrong in a conversation you no longer
+// have open, or in someone else's.
+//
+// Not loaded until asked for: these rows carry whole prompts, and a list of
+// fifty is megabytes.
+function AssistantLogsCard() {
+  const [logs, setLogs] = useState<AssistantRoundLog[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const load = () => {
+    setBusy(true)
+    setMsg(null)
+    api
+      .assistantLogs(50)
+      .then(setLogs)
+      .catch(() => setMsg('Could not load the logs.'))
+      .finally(() => setBusy(false))
+  }
+
+  const clear = async () => {
+    if (!confirm('Delete every stored AI request and response?\n\nThey hold the full prompts sent to the model. This cannot be undone.')) return
+    setBusy(true)
+    try {
+      const { deleted } = await api.clearAssistantLogs()
+      setMsg(`Deleted ${deleted} record${deleted === 1 ? '' : 's'}.`)
+      setLogs([])
+    } catch {
+      setMsg('Could not clear the logs.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-h"><h2>AI logs</h2></div>
+      <div style={{ padding: 16 }} className="space-y-3">
+        <p className="c-dim" style={{ marginTop: 0, fontSize: 13, lineHeight: 1.5 }}>
+          Every call made to the model: what was sent, what came back, and what it reasoned.
+          Kept for seven days. This is what to read when an answer is wrong and the tools it
+          ran look right: a truncated prompt or a malformed reply is invisible anywhere else.
+        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button className="btn" onClick={load} disabled={busy}>
+            {busy ? 'Loading…' : logs ? 'Refresh' : 'Load recent calls'}
+          </button>
+          {logs && logs.length > 0 && (
+            <button className="btn danger" onClick={clear} disabled={busy}>Clear all</button>
+          )}
+          {logs && <span className="c-faint text-sm">{logs.length} shown, newest first.</span>}
+        </div>
+        {msg && <p className="c-good text-sm" style={{ margin: 0 }}>{msg}</p>}
+        {logs && logs.length === 0 && (
+          <p className="c-faint text-sm" style={{ margin: 0 }}>
+            Nothing recorded yet. Ask the assistant something and it will appear here.
+          </p>
+        )}
+        {logs && logs.length > 0 && <RoundLogs logs={logs} />}
       </div>
     </div>
   )

@@ -841,6 +841,7 @@ function matchLabel(kind: BOMLine['match_kind']): string {
     case 'mpn': return 'MPN'
     case 'supplier': return 'supplier SKU'
     case 'value_footprint': return 'value + footprint'
+    case 'tag': return 'tag'
     case 'manual': return 'manual'
     default: return ''
   }

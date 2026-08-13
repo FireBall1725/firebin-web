@@ -13,7 +13,9 @@ import {
   type PartParameter,
   type PriceBreak,
   type StorageLocation,
+  type Tag,
 } from '../lib/api'
+import { TagInput } from './TagInput'
 import { SymbolPicker, PartGraphic } from './SymbolPicker'
 import { catStyle, symbolSrc, CATEGORY_SUGGESTIONS } from '../lib/symbols'
 import { icon } from '../lib/icons'
@@ -61,6 +63,7 @@ export function partToDraft(part: Part, categories: Category[]): PartDraft {
     is_template: part.is_template,
     reference_only: part.reference_only,
     minimum_stock: part.minimum_stock,
+    tags: (part.tags ?? []).map((t) => t.name),
     parameters: (part.parameters ?? []).map((q: PartParameter) => ({
       name: q.template_name,
       value: q.value,
@@ -85,6 +88,9 @@ export interface PartDraft {
   reference_only?: boolean
   minimum_stock?: number
   parameters?: ParameterInput[]
+  // Names the part answers to besides its own. Written through their own
+  // endpoint after the part saves, not as a field on the part PATCH.
+  tags?: string[]
   // Commercial: an MPN turns into a manufacturer part (+ supplier SKUs) on save.
   mpn?: string
   manufacturer?: string
@@ -134,6 +140,8 @@ export function PartForm({
   const [description, setDescription] = useState(initial?.description ?? '')
   const [minimum, setMinimum] = useState(String(initial?.minimum_stock ?? 0))
   const [params, setParams] = useState<ParameterInput[]>(initial?.parameters ?? [])
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? [])
+  const [tagVocab, setTagVocab] = useState<Tag[]>([])
   const [imagePath, setImagePath] = useState<string | null>(initial?.image_path ?? null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -166,6 +174,9 @@ export function PartForm({
       .listParameterTemplates()
       .then((t) => setParamNames(t.map((x) => x.name)))
       .catch(() => setParamNames([]))
+    // The vocabulary already in use, so the chip input can offer "Qwiic" rather
+    // than letting a second spelling of it be typed.
+    api.listTags().then(setTagVocab).catch(() => setTagVocab([]))
   }, [])
 
   // Local object-URL preview for a not-yet-uploaded image file.
@@ -258,6 +269,11 @@ export function PartForm({
           parameters: params.filter((p) => p.name.trim() && p.value.trim()),
         })
         if (imageFile) await api.uploadPartImage(editId, imageFile)
+        // Tags go through their own endpoint. They are deliberately not a field
+        // on the PATCH above: that request body is mirrored across the API, the
+        // MCP server and this client, and is decoded with unknown fields
+        // rejected, so a field one of the three forgets writes its zero value.
+        await api.setPartTags(editId, tags)
         onCreated(editId)
         return
       }
@@ -279,6 +295,7 @@ export function PartForm({
       })
 
       if (imageFile) await api.uploadPartImage(part.id, imageFile)
+      if (tags.length) await api.setPartTags(part.id, tags)
 
       // A template groups variants; it holds no MPN or stock of its own.
       if (mpn.trim()) {
@@ -500,6 +517,10 @@ export function PartForm({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Optional"
           />
+        </L>
+
+        <L label="Tags (other names this answers to, e.g. Qwiic, STEMMA QT)">
+          <TagInput value={tags} onChange={setTags} suggestions={tagVocab} />
         </L>
 
         {!editing && (

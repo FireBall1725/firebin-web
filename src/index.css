@@ -71,6 +71,51 @@ body {
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px;
 }
 
+/* Tag chips. Deliberately NOT .tag: that one is monospace and is used for the
+   identity row (IPN, package, barcode). A tag is a name you gave the part, not
+   a number the part carries, and the two must not read as the same kind of fact.
+
+   The eight palette slots are defined once here rather than as tokens in every
+   theme block. Each mixes its hue with the current --text for the foreground and
+   --panel-2 for the fill, so the chip follows whatever theme is active: on a
+   light palette the hue darkens toward the text, on a dark one it lightens. That
+   is why a fixed hex per slot is safe here when it would not be as a raw colour. */
+.tagchip {
+  --tc: var(--dim);
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+  padding: 2px 8px; border-radius: 20px; white-space: nowrap; line-height: 1.5;
+  color: color-mix(in srgb, var(--tc) 72%, var(--text));
+  background: color-mix(in srgb, var(--tc) 13%, var(--panel-2));
+  border: 1px solid color-mix(in srgb, var(--tc) 30%, var(--border));
+}
+.tagchip.tc-slate  { --tc: #6b7684; }
+.tagchip.tc-red    { --tc: #d64550; }
+.tagchip.tc-amber  { --tc: #c98a1a; }
+.tagchip.tc-green  { --tc: #3f9e56; }
+.tagchip.tc-teal   { --tc: #2f9c9c; }
+.tagchip.tc-blue   { --tc: #3d82d1; }
+.tagchip.tc-violet { --tc: #8b6fd4; }
+.tagchip.tc-pink   { --tc: #cf6fa8; }
+a.tagchip { text-decoration: none; }
+a.tagchip:hover, button.tagchip:hover { border-color: color-mix(in srgb, var(--tc) 60%, var(--border)); }
+button.tagchip { cursor: pointer; font-family: inherit; }
+.tagchip .x { background: none; border: none; padding: 0; margin-right: -2px; display: flex; cursor: pointer; color: inherit; opacity: 0.6; }
+.tagchip .x:hover { opacity: 1; }
+.tagchip .x svg { width: 12px; height: 12px; }
+
+/* The chip input: a bordered box that holds the chips and grows with them, with
+   the text field sharing the last line. Matches .input's frame so a form row
+   with a tag field does not look like a different app. */
+.taginput {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: 9px;
+  padding: 6px 8px; min-height: 38px;
+}
+.taginput:focus-within { border-color: var(--accent); }
+.taginput input { flex: 1; min-width: 120px; border: none; background: none; outline: none; color: var(--text); font-size: 13px; }
+.taginput.ro { background: var(--panel); }
+.tagrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
 /* ============================ Buttons ============================ */
 .btn {
   display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 9px;

@@ -300,7 +300,7 @@ export interface UploadBoardOpts {
   attachIbom?: boolean
 }
 
-export type MatchKind = 'fbpn' | 'project' | 'mpn' | 'supplier' | 'value_footprint' | 'manual' | 'none'
+export type MatchKind = 'fbpn' | 'project' | 'mpn' | 'supplier' | 'value_footprint' | 'tag' | 'manual' | 'none'
 
 export interface BOMLine {
   id: string
@@ -351,6 +351,39 @@ export interface PickList {
   unmatched: PickUnmatched[]
 }
 
+/** TagColour names a palette slot, not a hex value. The chip resolves it to CSS
+ *  variables so a tag stays legible in whichever theme the viewer is running. */
+export type TagColour = 'slate' | 'red' | 'amber' | 'green' | 'teal' | 'blue' | 'violet' | 'pink'
+
+export const TAG_COLOURS: TagColour[] = ['slate', 'red', 'amber', 'green', 'teal', 'blue', 'violet', 'pink']
+
+/** Tag is a name from the shared vocabulary: the word you reach for when you do
+ *  not remember the part number. A JST SH header carries "Qwiic" and "STEMMA QT"
+ *  without either becoming its identity, so tags render in their own row and
+ *  never stand in for a name or an MPN.
+ *
+ *  slug is the identity fold ("STEMMA QT", "stemma-qt" and "StemmaQT" are one
+ *  tag). Link and compare by slug; display name. */
+export interface Tag {
+  id: string
+  name: string
+  slug: string
+  colour?: TagColour
+  description?: string
+  created_at: string
+  updated_at: string
+  /** Parts carrying this tag. Set by listTags only. */
+  part_count: number
+}
+
+/** TagSuggestion is the built-in dictionary recognising a part: the names people
+ *  call it, and why it thinks so. A suggestion that cannot explain itself is
+ *  indistinguishable from a guess, so `why` is not optional. */
+export interface TagSuggestion {
+  tags: string[]
+  why: string
+}
+
 export interface Part {
   id: string
   category_id?: string
@@ -389,6 +422,11 @@ export interface Part {
   /** True when a stored PDF is linked to this part. Set by the list endpoints
    *  only, so the palette can show a PDF badge without a per-row fetch. */
   has_datasheet?: boolean
+  /** Tags the part carries. Present on the list endpoints as well as on a single
+   *  read, because the command palette filters client-side over listParts and
+   *  would otherwise never see them. Written through setPartTags, never through
+   *  updatePart. */
+  tags?: Tag[]
 }
 
 export interface DatasheetPartLink {
@@ -1324,10 +1362,14 @@ export const api = {
   listParameterTemplates() {
     return request<ParameterTemplate[]>('/parameter-templates')
   },
-  listParts(opts: { search?: string; category?: string; topLevel?: boolean } = {}) {
+  // tag filters by slug, and does so on the server: this endpoint caps at 500
+  // rows, so filtering the response instead would answer "everything tagged
+  // Qwiic" with whatever survived an alphabetical cut.
+  listParts(opts: { search?: string; category?: string; topLevel?: boolean; tag?: string } = {}) {
     const q = new URLSearchParams()
     if (opts.search) q.set('search', opts.search)
     if (opts.category) q.set('category', opts.category)
+    if (opts.tag) q.set('tag', opts.tag)
     q.set('top_level', String(opts.topLevel ?? true))
     return request<Part[]>(`/parts?${q.toString()}`)
   },
@@ -1363,6 +1405,40 @@ export const api = {
   },
   deletePart(id: string) {
     return request<{ status: string }>(`/parts/${id}`, { method: 'DELETE' })
+  },
+
+  // ── Tags ────────────────────────────────────────────────────────────────────
+  // The shared vocabulary of names a part answers to besides its own.
+  //
+  // setPartTags is its own call rather than a field on updatePart. That request
+  // body is mirrored in three codebases and the API decodes it with
+  // DisallowUnknownFields, so a field added to one and missed in another writes
+  // its zero value; tags stay out of that arrangement entirely.
+  listTags() {
+    return request<Tag[]>('/tags')
+  },
+  createTag(input: { name: string; colour?: TagColour | ''; description?: string }) {
+    return request<Tag>('/tags', { method: 'POST', body: JSON.stringify(input) })
+  },
+  updateTag(id: string, input: { name?: string; colour?: TagColour | ''; description?: string }) {
+    return request<Tag>(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+  },
+  // Moves every part carrying `id` onto `into`, then deletes `id`. Deliberate
+  // and separate from rename, which reports a conflict instead of collapsing two
+  // tags on a typo.
+  mergeTag(id: string, into: string) {
+    return request<{ status: string }>(`/tags/${id}/merge`, { method: 'POST', body: JSON.stringify({ into }) })
+  },
+  deleteTag(id: string) {
+    return request<{ status: string }>(`/tags/${id}`, { method: 'DELETE' })
+  },
+  setPartTags(partId: string, tags: string[]) {
+    return request<Tag[]>(`/parts/${partId}/tags`, { method: 'PUT', body: JSON.stringify({ tags }) })
+  },
+  // Well-known nicknames for a part the built-in dictionary recognises, minus
+  // any it already carries. Suggestions only: nothing is applied until a click.
+  suggestPartTags(partId: string) {
+    return request<TagSuggestion[]>(`/parts/${partId}/tag-suggestions`)
   },
 
 

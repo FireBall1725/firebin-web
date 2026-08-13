@@ -33,7 +33,10 @@ const FACET_LABEL: Record<FacetKind, string> = { footprint: 'Footprint', type: '
 
 type Item =
   | { kind: 'facet'; id: string; facet: Facet }
-  | { kind: 'part'; id: string; part: Part; catName?: string }
+  // tagHint names the tag that brought a part back, when that is what did it.
+  // Searching "qwiic" and being handed "SM04B-SRSS-TB" with no explanation
+  // reads as a wrong result; the row has to say why it is there.
+  | { kind: 'part'; id: string; part: Part; catName?: string; tagHint?: string }
   | { kind: 'datasheet'; id: string; ds: Datasheet }
   | { kind: 'location'; id: string; loc: StorageLocation }
   | { kind: 'project'; id: string; project: Project }
@@ -41,6 +44,18 @@ type Item =
   | { kind: 'kicadlib'; id: string; item: KicadLibraryItem }
 
 const uniq = (xs: string[]) => Array.from(new Set(xs))
+
+// tagHintFor returns the tag that explains a match, and only when the tag is
+// doing work the visible fields do not already do. A part named "Qwiic cable"
+// found by typing "qwiic" needs no footnote; the JST part number that answers
+// to the same word does.
+function tagHintFor(p: Part, words: string[]): string | undefined {
+  if (!words.length || !p.tags?.length) return undefined
+  const visible = [p.name, p.primary_mpn, p.ipn, p.package].filter(Boolean).join(' ').toLowerCase()
+  const unexplained = words.filter((w) => !visible.includes(w))
+  if (!unexplained.length) return undefined
+  return p.tags.find((t) => unexplained.some((w) => t.name.toLowerCase().includes(w)))?.name
+}
 
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
@@ -124,7 +139,20 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       if (f.kind === 'location' && (p.primary_location ?? '').toLowerCase() !== f.value.toLowerCase()) return false
     }
     if (!words.length) return facets.length > 0
-    const hay = [p.name, p.primary_mpn, p.ipn, p.description, p.package, p.keywords, catName(p)]
+    const hay = [
+      p.name,
+      p.primary_mpn,
+      p.ipn,
+      p.description,
+      p.package,
+      p.keywords,
+      catName(p),
+      // Tags, so the word you actually remember gets you there. The parts list
+      // payload carries them for exactly this: the palette matches client-side,
+      // and a tag that only appeared on a single part read would be invisible
+      // to the one search that gets used most.
+      ...(p.tags ?? []).map((t) => t.name),
+    ]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
@@ -147,7 +175,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
     // Parts.
     if (words.length || facets.length) {
-      parts.filter(partMatches).slice(0, 8).forEach((p) => out.push({ kind: 'part', id: `part-${p.id}`, part: p, catName: catName(p) }))
+      parts.filter(partMatches).slice(0, 8).forEach((p) =>
+        out.push({ kind: 'part', id: `part-${p.id}`, part: p, catName: catName(p), tagHint: tagHintFor(p, words) }),
+      )
     }
 
     // Datasheets, by their own title and filename as well as by whatever they
@@ -354,6 +384,7 @@ function Row({ item, onDatasheet }: { item: Item; onDatasheet: (partID: string) 
           <div className="title">{item.part.name}</div>
           <div className="sub">
             {[item.catName, item.part.package, item.part.primary_mpn].filter(Boolean).join(' · ') || '—'}
+            {item.tagHint && <> · tagged <b>{item.tagHint}</b></>}
           </div>
         </div>
         <span className="meta">

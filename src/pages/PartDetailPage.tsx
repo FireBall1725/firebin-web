@@ -11,6 +11,7 @@ import {
   type StorageLocation,
   type Category,
   type AdjustKind,
+  type TagSuggestion,
 } from '../lib/api'
 import { KicadDrawingView } from '../components/KicadDrawingView'
 import { PartFormModal, partToDraft } from '../components/PartForm'
@@ -20,9 +21,10 @@ import { ManufacturerParts } from '../components/ManufacturerParts'
 import { PrintLabelModal } from '../components/PrintLabelModal'
 import { StockLots } from '../components/StockLots'
 import { num } from '../lib/format'
+import { chipClass, tagSlug } from '../lib/tags'
 import { useRealtime } from '../lib/useRealtime'
 import { icon } from '../lib/icons'
-import { mdiChevronLeft } from '@mdi/js'
+import { mdiChevronLeft, mdiClose, mdiPlus } from '@mdi/js'
 import { useAuth } from '../auth/AuthContext'
 
 export function PartDetailPage() {
@@ -47,8 +49,31 @@ export function PartDetailPage() {
   const toggleSel = (name: string) =>
     setSelected((s) => { const n = new Set(s); if (n.has(name)) n.delete(name); else n.add(name); return n })
 
+  // Dictionary suggestions, and the ones dismissed on this browser. Dismissal
+  // is deliberately local: it is a preference about a hint, not a fact about the
+  // part, and giving it a table would mean a schema change to remember that
+  // someone once said "no thanks".
+  const [suggestions, setSuggestions] = useState<TagSuggestion[]>([])
+  const dismissKey = `firebin.tagsuggest.dismissed.${id}`
+  const [dismissed, setDismissed] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(dismissKey) ?? '[]') as string[]
+    } catch {
+      return []
+    }
+  })
+  const dismiss = (name: string) => {
+    const next = [...dismissed, tagSlug(name)]
+    setDismissed(next)
+    try { localStorage.setItem(dismissKey, JSON.stringify(next)) } catch { /* private mode */ }
+  }
+  const offered = suggestions
+    .flatMap((s) => s.tags.map((name: string) => ({ name, why: s.why })))
+    .filter((s) => !dismissed.includes(tagSlug(s.name)))
+
   const reload = useCallback(() => {
     api.getPart(id).then(setPart).catch(() => setNotFound(true))
+    api.suggestPartTags(id).then(setSuggestions).catch(() => setSuggestions([]))
     api.listPartStock(id).then(setStock).catch(() => setStock([]))
     api.listPartHistory(id).then(setHistory).catch(() => setHistory([]))
     // Refresh categories too, so a just-created category resolves for the chip
@@ -68,6 +93,12 @@ export function PartDetailPage() {
   }, [reload])
 
   useRealtime(['parts', 'stock'], reload)
+
+  const addSuggested = async (name: string) => {
+    if (!part) return
+    await api.setPartTags(part.id, [...(part.tags ?? []).map((t) => t.name), name])
+    reload()
+  }
 
   if (notFound) {
     return (
@@ -155,6 +186,56 @@ export function PartDetailPage() {
             )}
             {part.barcode && <span className="tag">{part.barcode}</span>}
           </div>
+          {/* Tags sit on their own line, below the identity row above. The
+              separation is the point: the IPN, package and barcode are numbers
+              the part carries, and a tag is a name you gave it. Putting "Qwiic"
+              in among them would make it read as another part number. */}
+          {!!part.tags?.length && (
+            <div className="tagrow" style={{ marginTop: 7 }}>
+              {part.tags.map((t) => (
+                <Link
+                  key={t.id}
+                  to={`/parts?tag=${encodeURIComponent(t.slug)}`}
+                  className={chipClass(t.colour)}
+                  title={t.description || `Show every part tagged ${t.name}`}
+                >
+                  {t.name}
+                </Link>
+              ))}
+            </div>
+          )}
+          {/* This line is the half of the feature that answers "which JST is the
+              Qwiic one". A tag you have to already know to type cannot tell you
+              that. Nothing is applied until it is clicked. */}
+          {canWrite && offered.length > 0 && (
+            <div className="tagrow" style={{ marginTop: 7 }}>
+              <span className="c-faint" style={{ fontSize: 12 }}>Also known as</span>
+              {offered.map((s) => (
+                <span key={s.name} className="tagchip" title={s.why}>
+                  {s.name}
+                  <button
+                    type="button"
+                    className="x"
+                    style={{ opacity: 1 }}
+                    onClick={() => addSuggested(s.name)}
+                    aria-label={`Tag this part ${s.name}`}
+                    title={`Add the tag ${s.name}`}
+                  >
+                    {icon(mdiPlus, { size: 12 })}
+                  </button>
+                  <button
+                    type="button"
+                    className="x"
+                    onClick={() => dismiss(s.name)}
+                    aria-label={`Dismiss the suggestion ${s.name}`}
+                    title="Not this part"
+                  >
+                    {icon(mdiClose, { size: 12 })}
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           </div>
         </div>
         <div className="flex items-center gap-3">

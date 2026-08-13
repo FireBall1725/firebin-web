@@ -2,8 +2,9 @@
 // Copyright (C) 2026 FireBall1725
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api, type Part, type Category, type StorageLocation } from '../lib/api'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { api, type Part, type Category, type StorageLocation, type Tag } from '../lib/api'
+import { chipClass } from '../lib/tags'
 import { isLow } from '../lib/stockState'
 import { PartFormModal } from '../components/PartForm'
 import { PrintLabelModal } from '../components/PrintLabelModal'
@@ -25,9 +26,20 @@ export function PartsPage() {
   const [parts, setParts] = useState<Part[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [locations, setLocations] = useState<StorageLocation[]>([])
+  const [tagVocab, setTagVocab] = useState<Tag[]>([])
   const [category, setCategory] = useState<string | undefined>(undefined)
   const [search, setSearch] = useState('')
   const [lowOnly, setLowOnly] = useState(false)
+  // The tag filter lives in the URL, not in component state, so a tag chip on a
+  // part page is a real link: shareable, bookmarkable, and survivable by the
+  // back button.
+  const [params, setParams] = useSearchParams()
+  const tag = params.get('tag') ?? ''
+  const clearTag = () => {
+    const next = new URLSearchParams(params)
+    next.delete('tag')
+    setParams(next, { replace: true })
+  }
   const [specOpen, setSpecOpen] = useState(false)
   const [pkg, setPkg] = useState('')
   const [value, setValue] = useState('')
@@ -58,16 +70,25 @@ export function PartsPage() {
           package: pkg.trim() || undefined,
           value: value.trim() || undefined,
         })
-      : api.listParts({ search: search || undefined, category, topLevel: true })
+      : api.listParts({
+          search: search || undefined,
+          category,
+          tag: tag || undefined,
+          // A tag filter drops the top-level restriction. Tagging one variant
+          // and then being told nothing carries the tag is the wrong answer;
+          // the whole point of asking is to see every part that has it.
+          topLevel: !tag,
+        })
     req
       .then(setParts)
       .catch(() => setParts([]))
       .finally(() => setLoading(false))
-  }, [search, category, pkg, value])
+  }, [search, category, pkg, value, tag])
 
   useEffect(() => {
     api.listCategories().then(setCategories).catch(() => setCategories([]))
     api.listLocations().then(setLocations).catch(() => setLocations([]))
+    api.listTags().then(setTagVocab).catch(() => setTagVocab([]))
   }, [])
 
   useEffect(() => {
@@ -109,7 +130,7 @@ export function PartsPage() {
   const totalPages = Math.max(1, Math.ceil(groups.length / pageSize))
   const pageNo = Math.min(page, totalPages)
   useEffect(() => { if (page !== pageNo) setPage(pageNo) }, [page, pageNo])
-  useEffect(() => { setPage(1) }, [search, category, lowOnly, pageSize, pkg, value])
+  useEffect(() => { setPage(1) }, [search, category, lowOnly, pageSize, pkg, value, tag])
 
   const pageGroups = groups.slice((pageNo - 1) * pageSize, pageNo * pageSize)
   const pageParts = useMemo(() => pageGroups.flatMap((g) => g.parts), [pageGroups])
@@ -320,6 +341,21 @@ export function PartsPage() {
               Low stock
             </button>
           </div>
+
+          {/* An active tag filter has to be visible and removable. The URL is
+              the only other place it shows, and a filter you cannot see is how
+              "half my parts disappeared" happens. */}
+          {tag && (
+            <div className="flex items-center gap-2 mb-3">
+              <span className="c-faint" style={{ fontSize: 13 }}>Tagged</span>
+              <span className={chipClass(tagVocab.find((t) => t.slug === tag)?.colour)}>
+                {tagVocab.find((t) => t.slug === tag)?.name ?? tag}
+                <button type="button" className="x" onClick={clearTag} aria-label="Clear tag filter">
+                  {icon(mdiClose, { size: 12 })}
+                </button>
+              </span>
+            </div>
+          )}
 
           {specOpen && (
             <div className="card" style={{ padding: 12, marginBottom: 12 }}>

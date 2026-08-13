@@ -36,7 +36,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { api, type Category } from '../lib/api'
 import { parseFirebinPartLink, resolveFirebinPart, parseFirebinLocationLink, resolveFirebinLocation, parseFirebinStockLink, resolveFirebinStock } from '../lib/deepLink'
-import { mdiCommentQuestionOutline, mdiBarcodeScan, mdiCameraOutline, mdiChevronDown, mdiCogOutline, mdiFileDocumentOutline, mdiFolderOutline, mdiFormatListBulletedSquare, mdiFormatListChecks, mdiMagnify, mdiMapMarkerOutline, mdiMenu, mdiPlus, mdiVectorSquare, mdiViewDashboardOutline, mdiWeatherNight, mdiWhiteBalanceSunny } from '@mdi/js'
+import { mdiCommentQuestionOutline, mdiBarcodeScan, mdiCameraOutline, mdiChevronDown, mdiCogOutline, mdiFileDocumentOutline, mdiFolderOutline, mdiFormatListBulletedSquare, mdiFormatListChecks, mdiMagnify, mdiMapMarkerOutline, mdiMenu, mdiPlus, mdiTagOutline, mdiVectorSquare, mdiViewDashboardOutline, mdiWeatherNight, mdiWhiteBalanceSunny } from '@mdi/js'
 import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 import { useHardwareScanner, useCameraScan } from '../lib/prefs'
 import { currentMode, toggleMode } from '../lib/themes'
@@ -66,6 +66,7 @@ function navFor(assistant: boolean): NavDef[] {
 const nav: NavDef[] = [
   { to: '/', labelKey: 'nav.dashboard', end: true, icon: icon(mdiViewDashboardOutline) },
   { to: '/parts', labelKey: 'nav.parts', icon: icon(mdiFormatListBulletedSquare) },
+  { to: '/tags', labelKey: 'nav.tags', icon: icon(mdiTagOutline) },
   { to: '/datasheets', labelKey: 'nav.datasheets', icon: icon(mdiFileDocumentOutline) },
   { to: '/locations', labelKey: 'nav.locations', icon: icon(mdiMapMarkerOutline) },
   { to: '/projects', labelKey: 'nav.projects', icon: icon(mdiFolderOutline) },
@@ -78,6 +79,7 @@ function crumbFor(path: string): [string, string] {
   if (path === '/') return ['Workspace', 'Dashboard']
   if (path.startsWith('/parts/')) return ['Inventory · Parts', 'Part']
   if (path.startsWith('/parts')) return ['Inventory', 'Parts']
+  if (path.startsWith('/tags')) return ['Inventory', 'Tags']
   if (path.startsWith('/datasheets/')) return ['Inventory · Datasheets', 'Datasheet']
   if (path.startsWith('/datasheets')) return ['Inventory', 'Datasheets']
   if (path.startsWith('/locations')) return ['Inventory', 'Locations']
